@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Fotbal 3D</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1420; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #fff; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; overscroll-behavior: none; }
+  canvas { display: block; }
+  #score { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: stretch; font-weight: 700; font-size: 18px; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+  #score > div { padding: 8px 14px; background: rgba(12,18,28,.88); }
+  #score .tn { min-width: 110px; text-align: center; letter-spacing: .5px; }
+  #t0 { border-bottom: 4px solid #1f5fd6; } #t1 { border-bottom: 4px solid #d62828; }
+  #sc { background: #fff !important; color: #111; font-size: 22px; min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+  #clock { font-variant-numeric: tabular-nums; min-width: 62px; text-align: center; color: #ffd84a; }
+  #msg { position: fixed; top: 30%; left: 50%; transform: translate(-50%,-50%); font-size: 54px; font-weight: 800; text-align: center; text-shadow: 0 4px 18px rgba(0,0,0,.8); pointer-events: none; opacity: 0; transition: opacity .2s; white-space: pre-line; }
+  #msg.on { opacity: 1; animation: pop .35s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes pop { from { transform: translate(-50%,-50%) scale(.4); } to { transform: translate(-50%,-50%) scale(1); } }
+  #msg.long { font-size: 30px; }
+  body.touch #msg.long { font-size: 19px; top: 42%; }
+  #radar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); border-radius: 6px; opacity: .85; pointer-events: none; }
+  body.touch #radar { width: 120px; bottom: 6px; }
+  .pp { position: fixed; bottom: 16px; padding: 10px 14px; background: rgba(12,18,28,.8); border-radius: 8px; min-width: 190px; font-size: 14px; }
+  #p1 { left: 16px; border-left: 5px solid #ffd84a; } #p2 { right: 16px; border-left: 5px solid #4ae3ff; }
+  .pp b { font-size: 17px; display: block; margin-bottom: 6px; }
+  .bar { height: 6px; background: rgba(255,255,255,.18); border-radius: 3px; margin-top: 5px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; }
+  .st i { background: #4cd964; } .pw i { background: #ff5a36; }
+  .pp small { opacity: .7; }
+  #menu { position: fixed; inset: 0; background: rgba(6,12,20,.86); display: flex; align-items: center; justify-content: center; }
+  #menu .box { max-width: 720px; padding: 30px 38px; text-align: center; }
+  #menu h1 { font-size: 52px; margin: 0 0 6px; } #menu p.sub { opacity: .75; margin: 0 0 26px; }
+  .opts { display: flex; gap: 16px; justify-content: center; margin-bottom: 28px; }
+  .opt { cursor: pointer; padding: 16px 22px; border: 2px solid rgba(255,255,255,.3); border-radius: 10px; font-size: 18px; font-weight: 600; }
+  .opt:hover { border-color: #ffd84a; }
+  kbd { display: inline-block; background: #fff; color: #111; border-radius: 4px; padding: 1px 7px; font: 600 13px/1.5 ui-monospace, Menlo, monospace; margin: 0 1px; }
+  table { margin: 0 auto; border-collapse: collapse; font-size: 15px; }
+  td, th { padding: 6px 14px; border-bottom: 1px solid rgba(255,255,255,.12); }
+  th { opacity: .7; font-weight: 600; } td:first-child { text-align: left; opacity: .85; }
+  .touchOnly { display: none; }
+  /* ---- telefon / tableta ---- */
+  #stickZone { position: fixed; left: 0; top: 0; bottom: 0; width: 50%; }
+  #stick { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 3px solid rgba(255,255,255,.45); background: rgba(255,255,255,.08); pointer-events: none; left: calc(90px + env(safe-area-inset-left)); bottom: 30px; top: auto; }
+  #stick i { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(255,255,255,.6); }
+  #stick.idle { margin: 0 0 0 -60px; opacity: .55; }
+  .tb { position: fixed; width: 86px; height: 86px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 800; font-size: 17px; border: 3px solid rgba(255,255,255,.6); background: rgba(12,18,28,.45); }
+  .tb small { font-weight: 600; font-size: 10px; opacity: .8; }
+  .tb.on { background: rgba(255,255,255,.4); transform: scale(.94); }
+  .tb { text-align: center; line-height: 1.05; }
+  #bSprint { right: calc(20px + env(safe-area-inset-right)); bottom: 18px; border-color: #4cd964; width: 92px; height: 92px; }
+  #bPass { right: calc(124px + env(safe-area-inset-right)); bottom: 14px; border-color: #ffd84a; }
+  #bShoot { right: calc(16px + env(safe-area-inset-right)); bottom: 124px; border-color: #ff5a36; }
+  #bThrough { right: calc(112px + env(safe-area-inset-right)); bottom: 108px; border-color: #4ae3ff; width: 74px; height: 74px; font-size: 12px; }
+  .tb .dfn { display: none; }
+  body.def .tb .atk { display: none; } body.def .tb .dfn { display: inline; }
+  body.def #bThrough { opacity: .25; }
+  #rotate { position: fixed; inset: 0; background: #0b1420; display: none; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; text-align: center; padding: 30px; z-index: 50; }
+  body.touch .keysOnly { display: none !important; }
+  body.touch .touchOnly { display: block; }
+  body.touch #p1 { bottom: auto; top: 8px; left: calc(8px + env(safe-area-inset-left)); min-width: 120px; padding: 6px 10px; font-size: 11px; }
+  body.touch #p1 b { font-size: 14px; margin-bottom: 2px; }
+  body.touch #score { top: 6px; font-size: 14px; } body.touch #score > div { padding: 5px 9px; } body.touch #score .tn { min-width: 76px; } body.touch #sc { font-size: 17px; min-width: 50px; }
+  body.touch #msg { font-size: 34px; }
+  body.touch #menu h1 { font-size: 32px; } body.touch #menu p.sub { margin-bottom: 14px; } body.touch #menu .box { padding: 12px 20px; }
+  body.touch .opt { padding: 16px 30px; font-size: 20px; }
+  @media (orientation: portrait) { body.touch #rotate { display: flex; } }
+  #toast { position: fixed; top: 66px; left: 50%; transform: translateX(-50%); background: rgba(12,18,28,.85); padding: 7px 16px; border-radius: 18px; font-weight: 700; font-size: 16px; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
+  #toast.on { opacity: 1; }
+  body.touch #toast { top: 42px; font-size: 13px; padding: 5px 12px; }
+  #pauseBtn { position: fixed; top: 12px; right: calc(12px + env(safe-area-inset-right)); width: 40px; height: 40px; border-radius: 50%; background: rgba(12,18,28,.8); display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer; }
+  body.touch #pauseBtn { top: 6px; width: 36px; height: 36px; }
+  #pause { position: fixed; inset: 0; background: rgba(6,12,20,.8); display: flex; align-items: center; justify-content: center; text-align: center; z-index: 40; }
+  #pause h1 { font-size: 40px; margin: 0 0 18px; }
+  .difs { margin: -8px 0 24px; font-size: 16px; }
+  .dif { display: inline-block; padding: 7px 18px; border: 2px solid rgba(255,255,255,.3); border-radius: 20px; margin: 0 4px; cursor: pointer; font-weight: 600; }
+  .dif.sel { background: #ffd84a; color: #111; border-color: #ffd84a; }
+  body.touch .opts { margin-bottom: 18px; } body.touch .difs { margin-bottom: 12px; } body.touch p.touchOnly { font-size: 13px; margin: 0; opacity: .85; }
+  .hidden { display: none !important; }
+</style>
+<script type="importmap">{ "imports": { "three": "./lib/three.module.min.js" } }</script>
+</head>
+<body>
+<div id="score">
+  <div class="tn" id="t0"></div><div id="sc">0 - 0</div><div class="tn" id="t1"></div><div id="clock">00:00</div>
+</div>
+<div id="msg"></div>
+<canvas id="radar" width="150" height="97"></canvas>
+<div class="pp hidden" id="p1"><small>Jucător 1</small><b id="p1n">-</b>Energie<div class="bar st"><i id="p1s"></i></div>Șut<div class="bar pw"><i id="p1p"></i></div></div>
+<div class="pp hidden" id="p2"><small>Jucător 2</small><b id="p2n">-</b>Energie<div class="bar st"><i id="p2s"></i></div>Șut<div class="bar pw"><i id="p2p"></i></div></div>
+
+<div id="menu">
+  <div class="box">
+    <h1>⚽ Fotbal 3D</h1>
+    <p class="sub">Albaștrii vs. Roșiii · 2 reprize a câte 3 minute</p>
+    <div class="opts">
+      <div class="opt" data-mode="1"><kbd class="keysOnly">1</kbd> <span class="keysOnly">Un jucător (contra calculatorului)</span><span class="touchOnly">▶ Joacă</span></div>
+      <div class="opt keysOnly" data-mode="2"><kbd>2</kbd> Doi jucători</div>
+    </div>
+    <div class="difs">Dificultate: <span class="dif" data-d="0">Ușor</span><span class="dif" data-d="1">Normal</span><span class="dif" data-d="2">Greu</span></div>
+    <p class="touchOnly">Stânga: joystick. Dreapta: <b>PASĂ</b>, <b>ADÂNCIME</b> (pasă în fața coechipierului), <b>ȘUT</b> (ține apăsat pentru putere) și <b>SPRINT</b> (ține apăsat).<br>Când nu ai mingea: <b>SCHIMBĂ</b> jucătorul și <b>DEPOSEDARE</b>.</p>
+<table class="keysOnly">
+      <tr><th></th><th>Jucător 1 (albastru)</th><th>Jucător 2 (roșu)</th></tr>
+      <tr><td>Mișcare</td><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></td></tr>
+      <tr><td>Pasă / schimbă jucătorul</td><td><kbd>F</kbd></td><td><kbd>K</kbd></td></tr>
+      <tr><td>Pasă în adâncime</td><td><kbd>R</kbd></td><td><kbd>O</kbd></td></tr>
+      <tr><td>Șut (ține apăsat) / deposedare</td><td><kbd>G</kbd> sau <kbd>Space</kbd></td><td><kbd>L</kbd></td></tr>
+      <tr><td>Pauză</td><td colspan="2"><kbd>P</kbd> sau <kbd>Esc</kbd></td></tr>
+      <tr><td>Sprint</td><td><kbd>Shift</kbd> stânga</td><td><kbd>Shift</kbd> dreapta</td></tr>
+    </table>
+  </div>
+</div>
+<div id="touch" class="hidden">
+  <div id="stickZone"></div>
+  <div id="stick" class="idle"><i></i></div>
+  <div class="tb" id="bThrough"><span class="atk">ADÂN-<br>CIME</span><span class="dfn">–</span></div>
+  <div class="tb" id="bPass"><span class="atk">PASĂ</span><span class="dfn">SCHIMBĂ</span></div>
+  <div class="tb" id="bShoot"><span class="atk">ȘUT</span><span class="dfn" style="font-size:12px">DEPOSE-<br>DARE</span></div>
+  <div class="tb" id="bSprint">SPRINT</div>
+</div>
+<div id="toast"></div>
+<div id="pauseBtn" class="hidden">⏸</div>
+<div id="pause" class="hidden"><div><h1>Pauză</h1><div class="opts"><div class="opt" id="resume">▶ Continuă</div><div class="opt" id="quit">Meniu</div></div></div></div>
+<div id="rotate">📱 Rotește telefonul pe orizontală</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
