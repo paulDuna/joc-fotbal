@@ -2,8 +2,17 @@ import * as THREE from 'three';
 import { TEAMS, FORMATION } from './data.js';
 import { buildWorld, makeBall, makePlayerMesh, makeMarker, HALF_L, HALF_W, GOAL_W, GOAL_H, BALL_R } from './world.js';
 import { initAudio, sfx } from './audio.js';
+import { loadMannequin, makeMannequin, animateMannequin } from './mannequin.js';
 
-const HALF_SECONDS = 180;           // durata reala a unei reprize
+let HALF_SECONDS = 240;           // durata reala a unei reprize (se alege din meniu)
+// lungimea reala a reprizei curente, cu tot cu minutele de prelungire (+X) date de arbitru
+const periodMin = () => (game.half <= 2 ? 45 : 15);
+const periodLen = () => (game.half <= 2 ? HALF_SECONDS : HALF_SECONDS / 3) * (periodMin() + (game.added || 0)) / periodMin();
+function newPeriod() {                                   // arbitrul decide cate minute se adauga la final
+  const r = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  game.added = game.half === 1 ? r(1, 3) : game.half === 2 ? r(2, 7) : r(0, 2);
+  game.addShown = false;
+}
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rnd = (a = 1) => (Math.random() - 0.5) * 2 * a;
@@ -17,10 +26,13 @@ document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(30, 1, 1, 500);
 function resize() {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize); resize();
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);   // telefon: cand apare/dispare bara browserului
+document.addEventListener('fullscreenchange', () => setTimeout(resize, 50));
 const world = buildWorld(scene, renderer, matchMedia('(pointer: coarse)').matches ? 1024 : 2048);
 const ballGfx = makeBall(scene);
 
@@ -36,7 +48,7 @@ TEAMS.forEach((t, ti) => {
   const sign = ti === 0 ? 1 : -1;
   t.players.forEach((d, i) => {
     const f = FORMATION[i], gk = i === 0;
-    const m = makePlayerMesh(scene, { shirt: gk ? t.gk : t.color, shorts: gk ? t.gk : t.shorts, socks: gk ? t.gk : t.socks, skinTone: d.t, hair: d.h, num: d.num });
+    const m = makePlayerMesh(scene, { shirt: gk ? t.gk : t.color, shorts: gk ? t.gk : t.shorts, socks: gk ? t.gk : t.socks, skinTone: d.t, hair: d.h, num: d.num, style: d.s, beard: d.b });
     players.push({ ...m, team: ti, sign, d, role: f.role, isGK: gk, hx: f.x, hz: f.z,
       x: f.x * sign, z: f.z * sign, vx: 0, vz: 0, fx: sign, fz: 0, stamina: 1, phase: Math.random() * 6,
       kickT: 0, lungeT: 0, lungeHit: false, stunT: 0, tackleCd: 0, aiT: 0, holdT: 0, diveT: 0, diveDir: 0, human: null, yellow: 0, jumpT: 0 });
@@ -55,7 +67,7 @@ const DIFF = [
   { spd: 1.0, tackle: 1.35, gk: 1.12, shot: 0.8 },       // greu
 ];
 const DIFF_BASE = { spd: 1, tackle: 1, gk: 1, shot: 1 };
-const dk = (p) => (game.mode === 1 && p.team === 1 ? DIFF[game.diff] : DIFF_BASE);
+const dk = (p) => (game.mode === 1 && humans.length && p.team !== humans[0].team ? DIFF[game.diff] : DIFF_BASE);   // dificultatea se aplica echipei calculatorului
 const rec = [];                                                         // ultimele secunde, pentru reluare
 const TGT = [0, 1].map(() => {                                          // inel alb: cui ii merge pasa
   const m = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.9, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, depthWrite: false }));
@@ -125,7 +137,13 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => { keys.delete(e.code); released.add(e.code); });
 window.addEventListener('blur', () => keys.clear());
-document.querySelectorAll('.opt').forEach((el) => el.addEventListener('click', () => { initAudio(); startMatch(+el.dataset.mode); }));
+// pe telefon jocul porneste pe tot ecranul (fara barele browserului jos/sus)
+function goFullscreen() {
+  if (!matchMedia('(pointer: coarse)').matches || document.fullscreenElement) return;
+  const el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
+  try { const pr = req && req.call(el, { navigationUI: 'hide' }); if (pr && pr.then) pr.then(() => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (_) {} }).catch(() => {}); } catch (_) {}
+}
+document.querySelectorAll('.opt[data-mode]').forEach((el) => el.addEventListener('click', () => { initAudio(); goFullscreen(); startMatch(+el.dataset.mode); }));
 
 // ---------- comenzi tactile (telefon / tableta) ----------
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || new URLSearchParams(location.search).has('touch');
@@ -161,7 +179,7 @@ if (isTouch) {
     });
     el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off);
   };
-  button('bPass', 'KeyF'); button('bShoot', 'KeyG'); button('bThrough', 'KeyR'); button('bSprint', 'ShiftLeft');
+  button('bPass', 'KeyF'); button('bShoot', 'KeyG'); button('bThrough', 'KeyR'); button('bSprint', 'ShiftLeft'); button('bTrick', 'KeyE');
   window.addEventListener('pointerdown', () => { if (game.state === 'end' && performance.now() - endAt > 1500) toMenu(); });
   window.addEventListener('contextmenu', (e) => e.preventDefault());
 }
@@ -173,11 +191,125 @@ function setDiff(d) {
 }
 document.querySelectorAll('.dif').forEach((el) => el.addEventListener('click', () => setDiff(+el.dataset.d)));
 setDiff(game.diff);
+function setDur(m) {                                     // durata reprizei, in minute reale
+  if (![2, 4, 6].includes(m)) m = 4;
+  HALF_SECONDS = m * 60;
+  document.querySelectorAll('.dur').forEach((el) => el.classList.toggle('sel', +el.dataset.m === m));
+  try { localStorage.setItem('fotbal_dur', m); } catch (_) {}
+}
+document.querySelectorAll('.dur').forEach((el) => el.addEventListener('click', () => setDur(+el.dataset.m)));
+try { setDur(+localStorage.getItem('fotbal_dur')); } catch (_) { setDur(4); }
+let myTeam = 0;                                          // cu ce echipa joci cand esti singur (0 = Albastrii, 1 = Rosiii)
+function setMyTeam(t) {
+  myTeam = t === 1 ? 1 : 0;
+  document.querySelectorAll('.myt').forEach((el) => el.classList.toggle('sel', +el.dataset.t === myTeam));
+  try { localStorage.setItem('fotbal_team', myTeam); } catch (_) {}
+}
+document.querySelectorAll('.myt').forEach((el) => el.addEventListener('click', () => setMyTeam(+el.dataset.t)));
+try { setMyTeam(+localStorage.getItem('fotbal_team')); } catch (_) { setMyTeam(0); }
+let camTV = true;
+const closeup = +new URLSearchParams(location.search).get('closeup') || 0;
+function setCam(tv) {
+  camTV = tv;
+  document.querySelectorAll('.cam').forEach((el) => el.classList.toggle('sel', (el.dataset.c === 'tv') === tv));
+  try { localStorage.setItem('fotbal_cam', tv ? 'tv' : 'larg'); } catch (_) {}
+}
+document.querySelectorAll('.cam').forEach((el) => el.addEventListener('click', () => setCam(el.dataset.c === 'tv')));
+try { setCam(localStorage.getItem('fotbal_cam') !== 'larg'); } catch (_) { setCam(true); }
+window.addEventListener('keydown', (e) => { if (e.code === 'KeyC' && game.state !== 'menu') { setCam(!camTV); toast(camTV ? '📺 Cameră TV' : '🔭 Cameră largă'); } });
 function setPaused(v) {
   if (game.state === 'menu' || game.state === 'end') v = false;
   game.paused = v; $('pause').classList.toggle('hidden', !v);
+  if (!v) { $('teamPanel').classList.add('hidden'); $('fkPanel').classList.add('hidden'); }
 }
 $('pauseBtn').addEventListener('click', () => setPaused(true));
+// ---------- manechin cu miscari filmate (se poate alege din meniu: Manechin / Clasic) ----------
+let manReady = false, useMan = true;
+try { useMan = localStorage.getItem('fotbal_model') !== 'clasic'; } catch (_) {}
+function attachMannequin(p) {
+  if (!manReady) return;
+  if (p.man) p.group.remove(p.man.root);
+  const t = TEAMS[p.team];
+  p.man = makeMannequin(p.isGK ? t.gk : t.color, p.isGK ? t.gk : t.shorts);
+  p.man.root.scale.setScalar(p.man.scale / p.group.scale.x);
+  p.group.add(p.man.root);
+  p.man.root.visible = useMan; p.body.visible = !useMan;
+}
+function setModel(man) {
+  useMan = man;
+  document.querySelectorAll('.mdl').forEach((el) => el.classList.toggle('sel', (el.dataset.m === 'man') === man));
+  try { localStorage.setItem('fotbal_model', man ? 'man' : 'clasic'); } catch (_) {}
+  for (const p of allPlayers) { if (p.man) p.man.root.visible = man; p.body.visible = !(man && p.man); }
+}
+document.querySelectorAll('.mdl').forEach((el) => el.addEventListener('click', () => setModel(el.dataset.m === 'man')));
+setModel(useMan);
+loadMannequin().then((g) => { if (!g) return; manReady = true; for (const p of allPlayers) attachMannequin(p); setModel(useMan); });
+
+// ---------- echipa si schimbari de jucatori ----------
+const origD = allPlayers.map((p) => p.d);               // primul 11, ca sa-l punem la loc la meci nou
+const bench = [[], []], subsUsed = [0, 0], MAX_SUBS = 5;
+let tpTeam = 0, tpSel = null;                             // tpSel: { kind: 'field'|'bench', i }
+function resetSquads() {
+  allPlayers.forEach((p, i) => { if (p.d !== origD[i]) substitute(p, origD[i]); });
+  for (let t = 0; t < 2; t++) { bench[t] = (TEAMS[t].bench || []).map((d) => ({ d, out: false })); subsUsed[t] = 0; }
+}
+function substitute(p, d) {                              // schimba omul (si aspectul), pastreaza postul
+  const t = TEAMS[p.team];
+  scene.remove(p.group);
+  const m = makePlayerMesh(scene, { shirt: p.isGK ? t.gk : t.color, shorts: p.isGK ? t.gk : t.shorts, socks: p.isGK ? t.gk : t.socks, skinTone: d.t, hair: d.h, num: d.num, style: d.s, beard: d.b });
+  Object.assign(p, m);
+  p.d = d; p.stamina = 1; p.yellow = 0; p.lastAng = undefined;
+  p.blob.visible = !renderer.shadowMap.enabled; p.group.visible = players.includes(p);
+  p.man = null; attachMannequin(p);
+}
+const POS = { G: 'POR', D: 'FUN', M: 'MIJ', A: 'ATA' };
+function renderTeam() {
+  const t = tpTeam, enBar = (v) => `<span class="tp-en"><i style="width:${(v * 100) | 0}%;background:${v > 0.5 ? '#4cd964' : v > 0.25 ? '#ffd84a' : '#ff5a36'}"></i></span>`;
+  $('tpTitle').textContent = 'Echipa ' + TEAMS[t].name;
+  $('tpSubs').textContent = 'Schimbări: ' + subsUsed[t] + ' / ' + MAX_SUBS;
+  $('tpTabs').innerHTML = game.mode === 2 ? [0, 1].map((i) => `<span class="tp-tab${i === t ? ' sel' : ''}" data-t="${i}">${TEAMS[i].short}</span>`).join('') : '';
+  $('tpField').innerHTML = squad[t].map((p, i) => {
+    const on = players.includes(p), sel = tpSel && tpSel.kind === 'field' && tpSel.i === i;
+    return `<div class="tp-row${sel ? ' sel' : ''}${on ? '' : ' off'}" data-k="field" data-i="${i}"><span class="tp-num">${p.d.num}</span><span class="tp-pos">${POS[p.role]}</span><span class="tp-name">${p.d.name}${p.yellow ? ' 🟨' : ''}${on ? '' : ' 🟥'}</span>${enBar(p.stamina)}</div>`;
+  }).join('');
+  $('tpBench').innerHTML = bench[t].map((b, i) => {
+    const sel = tpSel && tpSel.kind === 'bench' && tpSel.i === i;
+    return `<div class="tp-row${sel ? ' sel' : ''}${b.out ? ' off' : ''}" data-k="bench" data-i="${i}"><span class="tp-num">${b.d.num}</span><span class="tp-pos">${b.d.gk ? 'POR' : ''}</span><span class="tp-name">${b.d.name}${b.out ? ' (a ieșit)' : ''}</span>${b.out ? '' : enBar(1)}</div>`;
+  }).join('');
+}
+function trySub(fi, bi) {
+  const t = tpTeam, p = squad[t][fi], b = bench[t][bi];
+  if (!players.includes(p)) return toast('Jucătorul eliminat nu poate fi schimbat');
+  if (b.out) return toast('Jucătorul a ieșit deja, nu mai poate intra');
+  if (subsUsed[t] >= MAX_SUBS) return toast('Ai făcut deja toate cele ' + MAX_SUBS + ' schimbări');
+  if (!!p.isGK !== !!b.d.gk) return toast(p.isGK ? 'Portarul se schimbă doar cu un portar' : 'Un portar intră doar în locul portarului');
+  const old = p.d;
+  substitute(p, b.d);
+  bench[t][bi] = { d: old, out: true };
+  subsUsed[t]++;
+  stats.subs = (stats.subs || 0) + 1;
+  toast('🔁 Iese ' + old.name + ', intră ' + p.d.name, 3);
+  tpSel = null;
+}
+function openTeam(v) {
+  if (game.state === 'menu' || game.state === 'end') v = false;
+  if (v) { tpSel = null; tpTeam = humans.length ? humans[0].team : 0; renderTeam(); $('pause').classList.add('hidden'); }
+  $('teamPanel').classList.toggle('hidden', !v);
+  game.paused = v;
+}
+$('teamBtn').addEventListener('click', () => openTeam(true));
+$('teamOpen').addEventListener('click', () => openTeam(true));
+$('tpClose').addEventListener('click', () => openTeam(false));
+$('teamPanel').addEventListener('click', (e) => {
+  const tab = e.target.closest('.tp-tab');
+  if (tab) { tpTeam = +tab.dataset.t; tpSel = null; return renderTeam(); }
+  const row = e.target.closest('.tp-row'); if (!row || row.classList.contains('off')) return;
+  const k = row.dataset.k, i = +row.dataset.i;
+  if (tpSel && tpSel.kind !== k) { k === 'bench' ? trySub(tpSel.i, i) : trySub(i, tpSel.i); }
+  else tpSel = tpSel && tpSel.kind === k && tpSel.i === i ? null : { kind: k, i };
+  renderTeam();
+});
+window.addEventListener('keydown', (e) => { if (e.code === 'KeyT' && game.state !== 'menu' && game.state !== 'end') openTeam($('teamPanel').classList.contains('hidden')); });
 $('resume').addEventListener('click', () => setPaused(false));
 $('quit').addEventListener('click', () => { setPaused(false); toMenu(); });
 window.addEventListener('keydown', (e) => {
@@ -197,8 +329,12 @@ const log = [];
 function showMsg(text, secs = 2) { $('msg').classList.toggle('long', text.length > 60); log.push(Math.round(game.time) + 's ' + text.replace(/\n/g, ' ')); const m = $('msg'); m.textContent = text; m.classList.add('on'); game.msgT = secs; }
 let lastClock = '';
 function updateHud() {
-  const ms = Math.min(game.time, HALF_SECONDS) / HALF_SECONDS * 45 * 60 + (game.half - 1) * 45 * 60;
-  const s = String(Math.floor(ms / 60)).padStart(2, '0') + ':' + String(Math.floor(ms % 60)).padStart(2, '0');
+  const len = periodMin(), base = [0, 45, 90, 105][game.half - 1] || 0, add = game.added || 0;
+  const ms = Math.min(game.time, periodLen()) / periodLen() * (len + add) * 60 + base * 60;
+  if (game.state === 'play' && !game.addShown && add > 0 && ms >= (base + len) * 60) {
+    game.addShown = true; toast('⏱ Arbitrul de rezervă arată: +' + add + (add === 1 ? ' minut' : ' minute'), 3.5);
+  }
+  const s = game.state === 'shootout' ? 'PEN' : String(Math.floor(ms / 60)).padStart(2, '0') + ':' + String(Math.floor(ms % 60)).padStart(2, '0');
   if (s !== lastClock) { $('clock').textContent = s; lastClock = s; }
   humans.forEach((h, i) => {
     const n = i + 1;
@@ -210,7 +346,7 @@ function updateHud() {
 let defUi = null;
 function updateTouchUi() {
   if (!isTouch || !humans.length) return;
-  const def = !(ball.owner && ball.owner.team === humans[0].team);
+  const def = game.state === 'shootout' ? !!SO.taker && SO.taker.team !== humans[0].team : !(ball.owner && ball.owner.team === humans[0].team);
   if (def !== defUi) { defUi = def; document.body.classList.toggle('def', def); }
 }
 const radar = $('radar').getContext('2d');
@@ -227,33 +363,48 @@ function drawRadar() {
   }
   g.fillStyle = '#ffe94a'; g.beginPath(); g.arc((ball.x + 52.5) / 105 * W, (ball.z + 34) / 68 * H, 2, 0, 6.3); g.fill();
 }
-function updateScore() { $('sc').textContent = game.score[0] + ' - ' + game.score[1]; }
+function updateScore() {
+  const p = game.pens ? '  (' + game.pens[0] + ' - ' + game.pens[1] + ')' : '';
+  $('sc').textContent = game.score[0] + ' - ' + game.score[1] + p;
+}
 
 // ---------- flux meci ----------
 function startMatch(mode) {
-  game.mode = mode; game.half = 1; game.time = 0; game.score = [0, 0]; updateScore();
+  game.mode = mode; game.half = 1; game.time = 0; game.score = [0, 0]; game.next = null; game.pens = null; newPeriod(); updateScore();
   humans.length = 0;
-  for (let i = 0; i < mode; i++) humans.push({ team: i, keys: KEYMAPS[i], ctrl: squad[i][9], charge: 0, charging: false, marker: MARKERS[i], tgt: TGT[i], passTo: null, swT: 0 });
+  for (let i = 0; i < mode; i++) { const tm = mode === 1 ? myTeam : i; humans.push({ team: tm, keys: KEYMAPS[i], ctrl: squad[tm][9], charge: 0, charging: false, marker: MARKERS[i], tgt: TGT[i], passTo: null, swT: 0 }); }
   MARKERS.forEach((m, i) => m.setVisible(i < mode));
   $('p1').classList.toggle('hidden', mode < 1); $('p2').classList.toggle('hidden', mode < 2);
-  $('menu').classList.add('hidden'); $('touch').classList.toggle('hidden', !isTouch); $('pauseBtn').classList.remove('hidden');
+  $('menu').classList.add('hidden'); $('touch').classList.toggle('hidden', !isTouch); $('pauseBtn').classList.remove('hidden'); $('teamBtn').classList.remove('hidden');
   players.length = 0; players.push(...allPlayers);
+  resetSquads();
   players.forEach((p) => { p.stamina = 1; p.yellow = 0; p.sign = p.team === 0 ? 1 : -1; p.group.visible = true; });
   for (const k in stats) stats[k] = [0, 0];
   game.state = 'play';
   kickoff(0);
 }
-function toMenu() { game.state = 'menu'; $('touch').classList.add('hidden'); $('pauseBtn').classList.add('hidden'); TGT.forEach((m) => { m.visible = false; }); toast('', 0); $('menu').classList.remove('hidden'); $('msg').classList.remove('on'); }
+function toMenu() { game.state = 'menu'; $('touch').classList.add('hidden'); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden'); $('teamPanel').classList.add('hidden'); TGT.forEach((m) => { m.visible = false; }); toast('', 0); $('menu').classList.remove('hidden'); $('msg').classList.remove('on'); }
 
 function setOwner(p) {
   const off = ball.offside === p; ball.offside = null;
   if (off) {                                             // primeste mingea din pozitie de ofsaid
     stats.offs[p.team]++;
-    restart(1 - p.team, clamp(p.x, -HALF_L + 2, HALF_L - 2), clamp(p.z, -HALF_W + 2, HALF_W - 2), 'Ofsaid');
+    showOffLine(p);
+    restart(1 - p.team, clamp(p.x, -HALF_L + 2, HALF_L - 2), clamp(p.z, -HALF_W + 2, HALF_W - 2), 'OFSAID! 🚩\n' + p.d.name);
     return;
   }
   ball.owner = p; ball.passTarget = null; ball.lastTouch = p.team; ball.lastPlayer = p;
   if (p.isGK) p.holdT = 1.3;
+}
+
+// linia galbena de ofsaid (ca la VAR): arata unde era ultimul aparator cand s-a dat pasa
+const offMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.18, HALF_W * 2), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.9, depthWrite: false }));
+offMesh.rotation.x = -Math.PI / 2; offMesh.position.y = 0.045; offMesh.visible = false; scene.add(offMesh);
+let offT = 0;
+function showOffLine(p) {
+  const s = squad[p.team][0].sign;
+  offMesh.position.x = (ball.offLineX ?? offLine[p.team]) * s;
+  offMesh.visible = true; offT = 3;
 }
 
 function kickoff(team) {
@@ -263,16 +414,108 @@ function kickoff(team) {
     p.lungeT = p.stunT = p.kickT = p.tackleCd = p.diveT = 0;
   }
   const taker = firstActive(team, [9, 8, 10, 6, 5, 7, 1]);
-  ball.offside = ball.throwIn = ball.cornerK = null; game.scorer = null; rec.length = 0;
+  ball.offside = ball.throwIn = ball.cornerK = ball.freeKick = null; game.scorer = null; rec.length = 0;
   taker.x = -0.6 * taker.sign; taker.z = 0;
   ball.vx = ball.vy = ball.vz = 0; ball.noPickT = 0;
   setOwner(taker); ball.protectT = 1.5;
+  ball.freeKick = taker; game.fkT = 1.4;                 // lovitura de inceput: nu poti fugi cu mingea, trebuie data o pasa
+  if (humans.some((h) => h.team === team)) toast('Lovitura de început: dă o PASĂ', 2.5);
   for (const h of humans) { h.ctrl = h.team === team ? taker : firstActive(h.team, [6, 5, 7, 9, 8, 10, 1]); h.charge = 0; h.charging = false; }
   game.freeze = 1.2; sfx.whistle();
 }
 
+// lovitura libera: jocul sta pe loc pana o bate executantul (zid daca e aproape de poarta)
+function setFreeKick(taker, direct) {
+  ball.freeKick = taker; game.fkT = 0;
+  const def = 1 - taker.team, gx = -HALF_L * squad[def][0].sign;          // poarta pe care o apara adversarii
+  const dx = gx - ball.x, dz = -ball.z, d = Math.hypot(dx, dz);
+  if (d < 32 && d > 11) {
+    const ux = dx / d, uz = dz / d, cx = ball.x + ux * 9.15, cz = ball.z + uz * 9.15;
+    const n = d < 22 ? 4 : 3;
+    const wall = players.filter((q) => q.team === def && !q.isGK).sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz)).slice(0, n);
+    wall.forEach((q, i) => { const o = (i - (n - 1) / 2) * 0.62; q.x = cx - uz * o; q.z = cz + ux * o; q.vx = q.vz = 0; q.fx = -ux; q.fz = -uz; });
+  }
+  const hum = humans.find((h) => h.team === taker.team);
+  if (hum && direct && d < 32 && d > 13) openFkPick(taker);   // lovitura libera directa: alegi cine bate, apoi tintesti cu efect
+  else if (hum) toast('Lovitură liberă: țintește, apoi PASĂ sau ȘUT', 3.5);
+}
+
+// ---------- lovitura libera directa (langa careu): alegi executantul, tintesti cu efect, elan, sut ----------
+const FK_STARS = { Messi: 96, Ronaldo: 93, 'De Bruyne': 91, Kimmich: 89, Kane: 88, Modrić: 86, Valverde: 86, Foden: 85, Bellingham: 84, Salah: 84, Saka: 84, Lewandowski: 84, Pedri: 82, Musiala: 82, Mbappé: 82, Vinícius: 80, Haaland: 78 };
+const fkSkill = (d) => FK_STARS[d.name] ?? Math.round(d.sho * 0.5 + d.pas * 0.35 + d.dri * 0.15 - 8);
+const fkDots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.85, depthWrite: false }), 48);
+fkDots.visible = false; fkDots.frustumCulled = false; scene.add(fkDots);
+const fkTmp = new THREE.Object3D();
+function openFkPick(taker) {
+  const list = players.filter((q) => q.team === taker.team && !q.isGK).sort((a, b) => fkSkill(b.d) - fkSkill(a.d));
+  $('fkList').innerHTML = list.map((q, i) => `<div class="tp-row${i === 0 ? ' fk-best' : ''}" data-n="${allPlayers.indexOf(q)}"><span class="tp-num">${q.d.num}</span><span class="tp-name">${i === 0 ? '⭐ ' : ''}${q.d.name}${i === 0 ? ' — cel mai bun' : ''}</span><span class="fk-skill">${fkSkill(q.d)}</span></div>`).join('');
+  $('fkPanel').classList.remove('hidden'); game.paused = true;
+}
+$('fkList').addEventListener('click', (e) => {
+  const row = e.target.closest('.tp-row'); if (!row) return;
+  const p = allPlayers[+row.dataset.n], old = ball.freeKick;
+  $('fkPanel').classList.add('hidden'); game.paused = false;
+  if (old && old !== p) { old.x = ball.x - 3 * (old.sign); old.z = ball.z + 2.5; old.vx = old.vz = 0; }   // celalalt se da la o parte
+  ball.owner = p; ball.freeKick = p; ball.lastTouch = p.team; ball.lastPlayer = p; ball.protectT = 3;
+  for (const h of humans) if (h.team === p.team) { if (h.ctrl) h.ctrl.human = null; h.ctrl = p; h.charge = 0; h.charging = false; }
+  const gx = -HALF_L * squad[1 - p.team][0].sign;
+  game.fkAim = { taker: p, gx, aimZ: 0, curve: 0, phase: 'aim', run: 0, power: 0.55 };
+  placeFkTaker();
+  toast(isTouch ? 'Joystick sus/jos = ținta · stânga/dreapta = efectul · ține ȘUT' : 'W/S = ținta · A/D = efectul · ține ȘUT (G) pentru putere', 5);
+});
+function fkLaunch(a, power) {                            // viteza si efectul pentru tinta/efect/putere alese
+  const p = a.taker, dx0 = a.gx - ball.x, dz0 = a.aimZ - ball.z, dist = Math.hypot(dx0, dz0) || 1;
+  const sp = (19 + 11 * power) * (0.85 + p.d.sho * 0.0015) * (0.9 + fkSkill(p.d) / 1000);
+  const th = clamp(0.5 * a.curve * dist / sp, -0.4, 0.4), c = Math.cos(-th), s = Math.sin(-th);
+  const ux = dx0 / dist, uz = dz0 / dist;
+  return { vx: (ux * c - uz * s) * sp, vz: (ux * s + uz * c) * sp, vy: 2.6 + power * 4.6, curve: a.curve };
+}
+function placeFkTaker() {                                 // executantul sta 2.5 m in spatele mingii, pe directia sutului
+  const a = game.fkAim, p = a.taker, L = fkLaunch(a, a.power), l = Math.hypot(L.vx, L.vz) || 1;
+  const back = a.phase === 'run' ? 2.5 * (1 - a.run) + 0.55 : 2.5;
+  p.fx = L.vx / l; p.fz = L.vz / l; p.x = ball.x - p.fx * back; p.z = ball.z - p.fz * back;
+}
+function drawFkPath() {                                  // linia curba: unde va zbura mingea (aceeasi fizica ca updateBall)
+  const a = game.fkAim, L = fkLaunch(a, a.power);
+  let x = ball.x, y = BALL_R, z = ball.z, vx = L.vx, vy = L.vy, vz = L.vz, cv = L.curve, n = 0;
+  for (let i = 0; i < 150 && n < 48; i++) {
+    const dt = 1 / 60; vy -= 9.81 * dt;
+    if (cv && Math.hypot(vx, vz) > 3) { const ax = -vz * cv, az = vx * cv; vx += ax * dt; vz += az * dt; cv *= 1 - 0.4 * dt; }
+    x += vx * dt; y += vy * dt; z += vz * dt; if (y < BALL_R) { y = BALL_R; vy = -vy * 0.55; }
+    const k = 1 - 0.12 * dt; vx *= k; vz *= k;
+    if (i % 3 === 0) { fkTmp.position.set(x, y, z); fkTmp.updateMatrix(); fkDots.setMatrixAt(n++, fkTmp.matrix); }
+    if (Math.abs(x) > HALF_L + 0.5) break;
+  }
+  fkDots.count = n; fkDots.instanceMatrix.needsUpdate = true; fkDots.visible = true;
+}
+function fkAimStep(h, dt) {
+  const a = game.fkAim, p = a.taker, K = h.keys;
+  p.human = h;
+  if (a.phase === 'aim') {
+    let ix = (keys.has(K.right) ? 1 : 0) - (keys.has(K.left) ? 1 : 0), iz = (keys.has(K.down) ? 1 : 0) - (keys.has(K.up) ? 1 : 0);
+    if (h === humans[0] && stick.mag > 0.2) { ix = stick.x * stick.mag; iz = stick.z * stick.mag; }
+    a.aimZ = clamp(a.aimZ + iz * 3.2 * dt, -6, 6);
+    a.curve = clamp(a.curve + ix * 0.5 * dt * (a.gx > 0 ? 1 : -1), -0.55, 0.55);
+    if (anyPressed(K.shoot)) h.charging = true;
+    if (h.charging) {
+      h.charge = Math.min(1, h.charge + dt / 1.1); a.power = Math.max(0.15, h.charge);
+      if (anyReleased(K.shoot) || !anyDown(K.shoot) || h.charge >= 1) { a.phase = 'run'; a.run = 0; h.charging = false; h.charge = 0; }
+    }
+    p.vx = p.vz = 0; placeFkTaker(); drawFkPath();
+    return;
+  }
+  // elanul: cativa pasi spre minge, apoi sutul
+  a.run = Math.min(1, a.run + dt / 0.6);
+  const L = fkLaunch(a, a.power), l = Math.hypot(L.vx, L.vz) || 1;
+  p.vx = L.vx / l * 5.5; p.vz = L.vz / l * 5.5; placeFkTaker();
+  if (a.run >= 1) {
+    fkDots.visible = false; game.fkAim = null;
+    kick(p, L.vx, L.vy, L.vz); ball.curve = L.curve; stats.shots[p.team]++;
+  }
+}
+
 function restart(team, x, z, text, useGK, forced) {
-  ball.offside = ball.throwIn = ball.cornerK = null;
+  ball.offside = ball.throwIn = ball.cornerK = ball.freeKick = null;
   let taker = forced && players.includes(forced) && !forced.isGK ? forced : null, best = 1e9;
   if (useGK) taker = gkOf(team);
   else if (!taker) for (const p of teamOf(team)) { if (p.isGK) continue; const d = Math.hypot(p.x - x, p.z - z); if (d < best) { best = d; taker = p; } }
@@ -287,13 +530,14 @@ function restart(team, x, z, text, useGK, forced) {
   ball.vx = ball.vy = ball.vz = 0; ball.noPickT = 0;
   setOwner(taker); ball.protectT = 2.5;
   if (!taker.isGK) taker.holdT = 0.9;
+  if (text.startsWith('Fault') || text.startsWith('OFSAID')) setFreeKick(taker, text.startsWith('Fault'));
   const secs = text.includes('\n') ? 2.4 : 1.2;
   game.freeze = secs - 0.3; showMsg(text, secs); sfx.whistle();
 }
 
 function penalty(team, card) {
   const side = squad[team][0].sign;
-  ball.offside = ball.throwIn = ball.cornerK = null;
+  ball.offside = ball.throwIn = ball.cornerK = ball.freeKick = null;
   let taker = null;
   for (const p of players) if (p.team === team && !p.isGK && (!taker || p.d.sho > taker.d.sho)) taker = p;
   for (const p of players) {
@@ -303,7 +547,8 @@ function penalty(team, card) {
   }
   taker.x = side * (HALF_L - 11.9); taker.z = 0; taker.fx = side; taker.fz = 0;
   ball.vx = ball.vy = ball.vz = 0; ball.noPickT = 0;
-  setOwner(taker); ball.protectT = 4;
+  setOwner(taker); ball.protectT = 4; ball.freeKick = taker; game.fkT = 0;
+  if (humans.some((h) => h.team === taker.team)) toast('Penalty: țintește, apoi ȘUT', 3.5);
   game.freeze = 1.9; showMsg('PENALTY!' + card, 2.2); sfx.whistle();
 }
 
@@ -319,7 +564,7 @@ function foul(p, o, behind) {
   const pen = inOwnBox({ x, z, sign: p.sign });
   stats.fouls[p.team]++;
   let card = '';
-  if (Math.random() < (behind ? 0.35 : 0.07)) {
+  if (behind && Math.random() < 0.12) {                    // cartonas galben: doar la faulturi urate, din spate
     p.yellow++;
     if (p.yellow >= 2) { card = '\n🟥 ' + p.d.name + ' eliminat'; sendOff(p); } else card = '\n🟨 ' + p.d.name;
   }
@@ -364,16 +609,17 @@ function goal(team) {
 function topSpeed(p, sprint, dt) {
   const top = (5 + p.d.spd * 0.035) * dk(p).spd;
   const moving = Math.hypot(p.vx, p.vz) > 2;
-  if (sprint && p.stamina > 0.03) { if (moving) p.stamina = Math.max(0, p.stamina - 0.11 * dt); return top * (0.82 + 0.18 * p.stamina); }
-  p.stamina = Math.min(1, p.stamina + 0.05 * dt);
+  // energia: se consuma mai incet la sprint (~20 s de sprint) si revine mai repede (~11 s)
+  if (sprint && p.stamina > 0.03) { if (moving) p.stamina = Math.max(0, p.stamina - 0.05 * dt); return top * (0.95 + 0.25 * p.stamina); }   // sprint rapid: pana la ~10 m/s la cei mai rapizi
+  p.stamina = Math.min(1, p.stamina + 0.09 * dt);
   return top * 0.74;
 }
 
 function move(p, dx, dz, speed, dt) {
   if (ball.owner === p) speed *= 0.93;
-  if (ball.throwIn === p) speed = 0;
+  if (ball.throwIn === p || ball.freeKick === p) speed = 0;
   let ax = dx * speed - p.vx, az = dz * speed - p.vz;
-  const al = Math.hypot(ax, az), mx = 17 * dt;
+  const al = Math.hypot(ax, az), mx = 13 * dt;         // accelerare/franare treptata, nu instantanee
   if (al > mx) { ax *= mx / al; az *= mx / al; }
   p.vx += ax; p.vz += az;
   p.x = clamp(p.x + p.vx * dt, -HALF_L - 3, HALF_L + 3); p.z = clamp(p.z + p.vz * dt, -HALF_W - 2.5, HALF_W + 2.5);
@@ -400,29 +646,30 @@ function goTo(p, tx, tz, sprint, dt) {
 function kick(p, vx, vy, vz) {
   const gkHold = p.isGK && ball.owner === p, thr = ball.throwIn === p;
   if (thr) { const sp = Math.hypot(vx, vz) || 1, k = Math.min(1, 13 / sp); vx *= k; vz *= k; vy = clamp(vy, 3, 5); }   // aruncare cu mana
-  ball.owner = null; ball.passTarget = null; ball.offside = ball.throwIn = ball.cornerK = null;
+  ball.owner = null; ball.passTarget = null; ball.offside = ball.throwIn = ball.cornerK = ball.freeKick = null;
   ball.x = p.x + p.fx * 0.7; ball.z = p.z + p.fz * 0.7; ball.y = thr ? 2 : gkHold ? 0.5 : BALL_R;
-  ball.vx = vx; ball.vy = vy; ball.vz = vz;
+  ball.vx = vx; ball.vy = vy; ball.vz = vz; ball.curve = 0;
   ball.noPick = p; ball.noPickT = 0.4; ball.lastTouch = p.team; ball.lastPlayer = p;
-  p.kickT = 0.25;
+  p.kickT = 0.35;
   sfx.kick(Math.min(1, Math.hypot(vx, vz) / 30));
 }
 
 function doPass(p, m, dx, dz, through) {
-  let sp = 15, vy = 0;
+  let sp = 21, vy = 0;
   if (m) {
-    const d0 = Math.hypot(m.x - p.x, m.z - p.z), lead = Math.min(1.1, d0 / 18);
+    const d0 = Math.hypot(m.x - p.x, m.z - p.z), lead = Math.min(0.8, d0 / 24);
     if (through) { dx = clamp(m.x + p.sign * (7 + d0 * 0.25), -HALF_L + 3, HALF_L - 3) - p.x; dz = clamp(m.z + m.vz * 0.8, -HALF_W + 2, HALF_W - 2) - p.z; }
     else { dx = m.x + m.vx * lead - p.x; dz = m.z + m.vz * lead - p.z; }
     const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
-    if (d > 30 || ball.cornerK === p) { vy = d > 30 ? 7 : 6; sp = d / (2 * vy / 9.81) * 0.9; } else sp = Math.sqrt(30 + 9 * d);
+    if (d > 30 || ball.cornerK === p) { vy = d > 30 ? 7 : 6; sp = d / (2 * vy / 9.81) * 0.9; } else sp = Math.sqrt(140 + 17 * d);  // pase pe jos: rapide, dar usor de controlat
   }
   const e = rnd((1 - p.d.pas / 100) * 0.16), c = Math.cos(e), s = Math.sin(e);
   [dx, dz] = [dx * c - dz * s, dx * s + dz * c];
   p.fx = dx; p.fz = dz;
   const off = m && ball.protectT <= 0 && m.x * p.sign > offLine[p.team] + 0.3;
+  const lineAtPass = offLine[p.team];
   kick(p, dx * sp, vy, dz * sp);
-  ball.passTarget = m || null; ball.offside = off ? m : null;
+  ball.passTarget = m || null; ball.offside = off ? m : null; ball.offLineX = lineAtPass;
 }
 
 function shoot(p, power, aimZ) {
@@ -434,11 +681,29 @@ function shoot(p, power, aimZ) {
   }
   let dx = p.fx, dz = p.fz;
   if (aimZ != null) { dx = gx - p.x; dz = aimZ - p.z; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l; }
+  const sp = (23 + 17 * power) * (0.85 + p.d.sho * 0.0015);   // suturi tari: pana la ~40 m/s (~140 km/h)
+  // sut cu efect: pleaca putin pe langa si se curbeaza spre tinta (cu cat e mai bland, cu atat are mai mult efect)
+  const dist = Math.hypot(gx - p.x, (aimZ ?? p.z) - p.z);
+  let curve = 0;
+  if (dist < 38 && Math.random() < 0.8) {
+    curve = (Math.random() < 0.5 ? -1 : 1) * (0.12 + (1 - power) * 0.22) * (0.6 + p.d.sho / 250);
+    const th = clamp(0.5 * curve * dist / sp, -0.25, 0.25);
+    const cc = Math.cos(-th), ss = Math.sin(-th); [dx, dz] = [dx * cc - dz * ss, dx * ss + dz * cc];
+  }
   const e = rnd((0.02 + (1 - p.d.sho / 100) * 0.22 + power * 0.04) * (p.human ? 0.6 : dk(p).shot)), c = Math.cos(e), sn = Math.sin(e);
   [dx, dz] = [dx * c - dz * sn, dx * sn + dz * c];
-  const sp = (17 + 13 * power) * (0.85 + p.d.sho * 0.0015);
   p.fx = dx; p.fz = dz;
   kick(p, dx * sp, 1.2 + power * power * 7.5 + Math.random() * 1.5, dz * sp);
+  ball.curve = curve;
+}
+
+// "braziliana" (rainbow flick): mingea e ridicata cu calcaiul pe la spate, peste cap, si cade in fata jucatorului
+function rainbow(p) {
+  const f = Math.max(Math.hypot(p.vx, p.vz), 4) + 1.4;
+  kick(p, p.fx * f, 6.3, p.fz * f);
+  ball.y = 0.35; ball.noPickT = 0.6; ball.passTarget = p; ball.trickT = 1.3;
+  p.kickT = 0; p.trickT = 0.45;
+  toast('Braziliana! 🌈', 1.2);
 }
 
 function startLunge(p) {
@@ -467,7 +732,7 @@ function bestPass(p, allowBack) {
     if (m.team !== p.team || m === p || m.isGK) continue;
     const d = Math.hypot(m.x - p.x, m.z - p.z); if (d < 5 || d > 42) continue;
     const prog = (m.x - p.x) * p.sign; if (prog < -15 && !allowBack) continue;
-    if (ball.protectT <= 0 && m.x * p.sign > offLine[p.team] + 0.3) continue;      // e in ofsaid
+    if (ball.protectT <= 0 && m.x * p.sign > offLine[p.team] + 0.3 && Math.random() > 0.3) continue;      // e in ofsaid (dar uneori calculatorul nu observa)
     if (!laneClear(p, m)) continue;
     const sc = prog * 0.08 + Math.min(nearestOpp(m).d, 10) * 0.15 + Math.random() * 0.5 - (d > 30 ? 1 : 0);
     if (sc > bs) { bs = sc; best = m; }
@@ -494,7 +759,9 @@ function formationTarget(p) {
   if (p.role === 'D') x = clamp(p.hx + (bx + HALF_L) * 0.45 + (has ? 4 : -2), -46, 5);
   else if (p.role === 'M') x = clamp(p.hx + bx * 0.6 + (has ? 8 : -4), -40, 38);
   else x = clamp(p.hx + bx * 0.6 + (has ? 12 : -2), -20, 46);
-  if (p.role !== 'D' && has) x = Math.min(x, offLine[p.team] - 0.7);              // nu sta in ofsaid
+  // nu sta in ofsaid... de obicei: atacantii mai scapa din cand in cand cu un pas prea mult, ca in realitate
+  if (p.role === 'A' && Math.random() < 0.004) p.greedy = Math.random() < 0.35 ? 3.5 : 0;
+  if (p.role !== 'D' && has) x = Math.min(x, offLine[p.team] - 0.7 + (p.greedy || 0));
   const z = clamp(p.hz * (has ? 1 : 0.75) + bz * 0.25, -32, 32);
   return [x * s, z * s];
 }
@@ -503,6 +770,24 @@ function formationTarget(p) {
 function carrierAI(p, dt) {
   const s = p.sign, gx = HALF_L * s, dg = Math.hypot(gx - p.x, p.z);
   const opp = nearestOpp(p);
+  if (ball.freeKick === p) {                              // lovitura libera / penalty batut de calculator
+    move(p, 0, 0, 0, dt);
+    const gdx = gx - p.x, gdz = -p.z, gl = Math.hypot(gdx, gdz) || 1; face(p, gdx / gl, gdz / gl, Math.min(1, 6 * dt));
+    if (game.fkT > 2) {
+      const k = gkOf(1 - p.team);
+      if (dg < 30) shoot(p, 0.55 + Math.random() * 0.35, (k.z > 0 ? -1 : 1) * (1.8 + Math.random() * 1.4));
+      else {                                               // pasa scurta, sigura, la cel mai apropiat coleg liber
+        let m = null, md = 1e9;
+        for (const q of players) {
+          if (q.team !== p.team || q === p || q.isGK) continue;
+          const d = Math.hypot(q.x - p.x, q.z - p.z);
+          if (d > 4 && d < 28 && d < md && laneClear(p, q)) { md = d; m = q; }
+        }
+        doPass(p, m || bestPass(p, true), p.fx, p.fz);
+      }
+    }
+    return;
+  }
   if (ball.throwIn === p || ball.cornerK === p) {         // aut sau corner executat de calculator
     move(p, 0, 0, 0, dt); p.holdT -= dt;
     if (p.holdT <= 0) {
@@ -626,12 +911,19 @@ function updateHuman(h, dt) {
   const p = h.ctrl; p.human = h; h.passTo = null;
   let ix = (keys.has(K.right) ? 1 : 0) - (keys.has(K.left) ? 1 : 0), iz = (keys.has(K.down) ? 1 : 0) - (keys.has(K.up) ? 1 : 0);
   let sprint = keys.has(K.sprint);
-  if (h.team === 0 && stick.mag > 0.2) { ix = stick.x; iz = stick.z; }
+  if (h === humans[0] && stick.mag > 0.2) { ix = stick.x; iz = stick.z; }
   const il = Math.hypot(ix, iz); if (il) { ix /= il; iz /= il; }
   const owns = ball.owner === p;
   if (p.stunT > 0 || p.lungeT > 0) { h.charging = false; h.charge = 0; return; }
 
+  h.tapT = (h.tapT || 0) - dt;
   if (owns) {
+    const trickKey = h === humans[0] ? 'KeyE' : 'KeyU';      // butonul TRUC (tasta E / U) sau SPRINT de 2 ori = braziliana
+    if (pressed.has(trickKey) && ball.throwIn !== p && ball.freeKick !== p) { if (il) face(p, ix, iz); rainbow(p); h.charging = false; h.charge = 0; return; }
+    if (pressed.has(K.sprint) && ball.throwIn !== p && ball.freeKick !== p) {
+      if (h.tapT > 0) { h.tapT = 0; if (il) face(p, ix, iz); rainbow(p); h.charging = false; h.charge = 0; return; }
+      h.tapT = 0.5;                                       // ai o jumatate de secunda pentru a doua apasare
+    }
     h.passTo = humanPassTarget(p, il ? ix : p.fx, il ? iz : p.fz);
     const thr = anyPressed(K.through);
     if (anyPressed(K.pass) || thr) {
@@ -672,26 +964,36 @@ function updateHuman(h, dt) {
     if (anyPressed(K.shoot)) { if (il) face(p, ix, iz); startLunge(p); return; }
   }
   const sp = topSpeed(p, sprint && il > 0, dt);
-  if (il) { if (ball.throwIn === p) face(p, ix, iz, Math.min(1, 8 * dt)); move(p, ix, iz, sp, dt); }
+  if (il) { if (ball.throwIn === p || ball.freeKick === p) face(p, ix, iz, Math.min(1, 8 * dt)); move(p, ix, iz, sp, dt); }
   else if (!ball.owner && ball.passTarget === p) chaseBall(p, dt);   // ajutor la primirea pasei
   else move(p, 0, 0, 0, dt);
 }
 
 // ---------- minge ----------
 function updateBall(dt) {
-  ball.noPickT -= dt; ball.protectT -= dt;
+  ball.noPickT -= dt; ball.protectT -= dt; ball.trickT = (ball.trickT || 0) - dt;
   const px = ball.x;
+  if (ball.owner && game.fkAim && game.fkAim.taker === ball.owner) {   // lovitura libera directa: mingea sta pe loc, executantul isi ia elan
+    ball.vx = ball.vy = ball.vz = 0; ball.y = BALL_R; return px;
+  }
   if (ball.owner) {
     const o = ball.owner, hold = o.isGK, thr = ball.throwIn === o;
     // mingea e condusa din atingeri: se departeaza putin de picior la fiecare pas
     const k = thr ? 0 : hold ? 0.35 : 0.5 + 0.32 * Math.abs(Math.sin(o.phase)) * Math.min(1, Math.hypot(o.vx, o.vz) / 5);
     ball.x = o.x + o.fx * k; ball.z = o.z + o.fz * k;
+    if (hold) ball.x = clamp(ball.x, -HALF_L + 0.25, HALF_L - 0.25);   // portarul cu mingea in brate nu intra cu ea in poarta
     ball.y = thr ? 2.05 : hold ? 1.05 : BALL_R; ball.vx = o.vx; ball.vz = o.vz; ball.vy = 0;
     if (thr) ball.protectT = Math.max(ball.protectT, 0.3); else if (ball.protectT <= 0) ball.cornerK = null;
     spinBall(dt);
     return px;
   }
   ball.vy -= 9.81 * dt;
+  const hs = Math.hypot(ball.vx, ball.vz);
+  if (ball.curve && hs > 3) {                            // efect: mingea se curbeaza in aer (efectul Magnus)
+    const ax = -ball.vz * ball.curve, az = ball.vx * ball.curve;
+    ball.vx += ax * dt; ball.vz += az * dt;
+    ball.curve *= ball.y <= BALL_R + 0.01 ? 1 - 3 * dt : 1 - 0.4 * dt;
+  }
   ball.x += ball.vx * dt; ball.y += ball.vy * dt; ball.z += ball.vz * dt;
   const sp = Math.hypot(ball.vx, ball.vz);
   if (ball.y <= BALL_R) {
@@ -720,12 +1022,13 @@ function pickups() {
     if (p.stunT > 0 && p.lungeT <= 0) continue;
     if (ball.noPick === p && ball.noPickT > 0) continue;
     const hands = p.isGK && inOwnBox(p);
-    const reach = hands ? (p.diveT > 0 ? 1.9 : 1.4) : p.lungeT > 0 ? 1.2 : 0.85;
+    // cat de departe ajunge un jucator la minge (picior intins): mai mare = pasele sunt oprite/interceptate mai usor
+    const reach = hands ? (p.diveT > 0 ? 1.9 : 1.4) : p.lungeT > 0 ? 1.5 : 1.15;
     const d = Math.hypot(p.x - ball.x, p.z - ball.z);
     if (d < reach && ball.y < (hands ? 2.6 : 1.4) && d < bd) { bd = d; best = p; }
   }
   if (!best) {                                           // minge inalta -> lovitura de cap
-    if (ball.y >= 1.4 && ball.y < 2.5 && ball.vy < 2) {
+    if (ball.y >= 1.4 && ball.y < 2.5 && ball.vy < 2 && !(ball.trickT > 0)) {   // la braziliana nimeni nu da cu capul
       let hp = null, hd = 1.0;
       for (const p of players) {
         if (p.isGK || p.stunT > 0 || (ball.noPick === p && ball.noPickT > 0)) continue;
@@ -773,11 +1076,17 @@ function checkBounds(prevX) {
 function step(dt) {
   for (const p of players) {
     p.human = null;
-    p.kickT -= dt; p.tackleCd -= dt; p.diveT -= dt; p.jumpT -= dt;
+    p.kickT -= dt; p.tackleCd -= dt; p.diveT -= dt; p.jumpT -= dt; p.trickT = (p.trickT || 0) - dt;
     if (p.stunT > 0) p.stunT -= dt;
   }
   computeChasers();
-  for (const h of humans) updateHuman(h, dt);
+  const fk = ball.freeKick && ball.owner === ball.freeKick ? ball.freeKick : null;   // la lovitura libera toti asteapta
+  if (fk) game.fkT += dt; else ball.freeKick = null;
+  if (game.fkAim && fk !== game.fkAim.taker) { game.fkAim = null; fkDots.visible = false; }
+  for (const h of humans) {
+    if (fk && h.team !== fk.team) continue;
+    if (game.fkAim && h.team === game.fkAim.taker.team) fkAimStep(h, dt); else updateHuman(h, dt);
+  }
   for (const p of players) {
     if (p.lungeT > 0) {                                // alunecare / deposedare
       p.lungeT -= dt; p.vx = p.fx * 9; p.vz = p.fz * 9; p.x += p.vx * dt; p.z += p.vz * dt;
@@ -786,12 +1095,13 @@ function step(dt) {
         p.lungeHit = true;
         const behind = p.fx * o.fx + p.fz * o.fz > 0.5;    // atac din spate: mai greu si mai periculos
         if (Math.random() < clamp(0.55 + (p.d.def - o.d.dri) / 150, 0.3, 0.85) - (behind ? 0.2 : 0)) { setOwner(p); o.stunT = 0.5; p.lungeT = 0; }
-        else { p.stunT = 0.7; if (Math.random() < (behind ? 0.4 : 0.07)) { p.lungeT = 0; foul(p, o, behind); return; } }
+        else { p.stunT = 0.7; if (Math.random() < (behind ? 0.14 : 0.016)) { p.lungeT = 0; foul(p, o, behind); return; } }   // faulturi: din cand in cand, nu foarte des
       }
       if (p.lungeT <= 0 && ball.owner !== p) p.stunT = Math.max(p.stunT, 0.3);
       continue;
     }
     if (p.stunT > 0) { move(p, 0, 0, 0, dt); continue; }
+    if (fk && p !== fk) { move(p, 0, 0, 0, dt); if (!p.human) { const bx = ball.x - p.x, bz = ball.z - p.z, bl = Math.hypot(bx, bz) || 1; face(p, bx / bl, bz / bl, Math.min(1, 5 * dt)); } continue; }
     if (p.human) continue;
     if (p.isGK) gkAI(p, dt); else updateAI(p, dt);
   }
@@ -806,14 +1116,146 @@ function step(dt) {
   checkBounds(prevX);
 
   game.time += dt;
-  if (game.state === 'play' && game.time >= HALF_SECONDS) {
-    sfx.whistle();
-    if (game.half === 1) { game.state = 'break'; game.timer = 5; showMsg('Pauză  ' + game.score[0] + ' - ' + game.score[1] + '\n' + statLine() + '\nEchipele schimbă terenul', 5); }
-    else {
-      game.state = 'end'; endAt = performance.now();
-      const [a, b] = game.score, w = a === b ? 'Egal' : 'Câștigă ' + TEAMS[a > b ? 0 : 1].name;
-      showMsg('Final: ' + a + ' - ' + b + '  ·  ' + w + '\n' + statLine() + (isTouch ? '\nAtinge ecranul = meniu' : '\nEnter = meniu'), 1e9);
+  if (game.state === 'play' && game.time >= periodLen()) {
+    const [a, b] = game.score, sc = a + ' - ' + b, draw = a === b;
+    const brk = (text, next) => { game.state = 'break'; game.timer = 5; game.next = next || null; showMsg(text, 5); };
+    if (game.half === 1) { sfx.whistle(2); brk('Pauză  ' + sc + '\n' + statLine() + '\nEchipele schimbă terenul'); }
+    else if (game.half === 2 && draw) { sfx.whistle(2); brk('Egal după 90 de minute: ' + sc + '\nUrmează PRELUNGIRILE\n2 reprize a câte 15 minute'); }
+    else if (game.half === 3) { sfx.whistle(2); brk('Pauză în prelungiri  ' + sc + '\nEchipele schimbă terenul'); }
+    else if (game.half === 4 && draw) { sfx.whistle(3); brk('Egal și după prelungiri: ' + sc + '\nUrmează LOVITURILE DE LA 11 METRI!', 'shootout'); }
+    else { sfx.whistle(3); endMatch(); }
+  }
+}
+
+function endMatch() {
+  game.state = 'end'; endAt = performance.now();
+  TGT.forEach((m) => { m.visible = false; });
+  const [a, b] = game.score, pens = game.pens;
+  let w = a === b ? 'Egal' : 'Câștigă ' + TEAMS[a > b ? 0 : 1].name;
+  if (pens) w = 'Câștigă ' + TEAMS[pens[0] > pens[1] ? 0 : 1].name + ' la penalty-uri (' + pens[0] + ' - ' + pens[1] + ')';
+  const extra = game.half > 2 ? ' (după prelungiri)' : '';
+  showMsg('Final: ' + a + ' - ' + b + extra + '\n' + w + '\n' + statLine() + (isTouch ? '\nAtinge ecranul = meniu' : '\nEnter = meniu'), 1e9);
+}
+
+// ---------- lovituri de la 11 metri (dupa prelungiri) ----------
+// Toate se bat la poarta din dreapta (x = +HALF_L). Echipele bat pe rand, cate 5; daca e tot egal, continua una-una.
+const SO = { kicks: [[], []], turn: 0, order: [[], []], idx: [0, 0], taker: null, keeper: null, phase: 'set', t: 0, diveZ: 0, saved: false, aim: 0 };
+function startShootout() {
+  game.state = 'shootout'; game.pens = [0, 0]; updateScore();
+  SO.kicks = [[], []]; SO.turn = 0; SO.idx = [0, 0];
+  for (let t = 0; t < 2; t++) SO.order[t] = players.filter((p) => p.team === t && !p.isGK).sort((x, y) => y.d.sho - x.d.sho);
+  ball.offside = ball.throwIn = ball.cornerK = ball.passTarget = null;
+  for (const p of players) { p.vx = p.vz = 0; p.stunT = p.lungeT = p.kickT = p.diveT = p.jumpT = 0; }
+  TGT.forEach((m) => { m.visible = false; });
+  nextPenalty();
+}
+function nextPenalty() {
+  const t = SO.turn, list = SO.order[t];
+  const p = list[SO.idx[t] % list.length]; SO.idx[t]++;
+  const k = gkOf(1 - t);
+  SO.taker = p; SO.keeper = k; SO.phase = 'set'; SO.t = 0; SO.saved = false; SO.aim = 0;
+  let i = 0;
+  for (const q of players) {                             // ceilalti asteapta in cercul de la centru
+    if (q === p || q === k) continue;
+    const a = (i++ / (players.length - 2)) * Math.PI - Math.PI / 2;
+    q.x = 2 + Math.cos(a) * 6 * (q.team ? 1 : 0.6); q.z = Math.sin(a) * 7; q.vx = q.vz = 0; q.fx = 1; q.fz = 0; q.diveT = 0;
+  }
+  p.sign = 1; k.sign = -1;
+  p.x = HALF_L - 12; p.z = 0; p.fx = 1; p.fz = 0; p.vx = p.vz = 0;
+  k.x = HALF_L - 0.5; k.z = 0; k.fx = -1; k.fz = 0; k.vx = k.vz = 0; k.diveT = 0;
+  ball.owner = null; ball.x = HALF_L - 11; ball.z = 0; ball.y = BALL_R; ball.vx = ball.vy = ball.vz = 0;
+  ball.lastPlayer = p; ball.lastTouch = p.team;
+  for (const h of humans) { h.ctrl = h.team === p.team ? p : k; h.charge = 0; h.charging = false; }
+  const me = humans.find((h) => h.team === p.team), meK = humans.find((h) => h.team === k.team);
+  if (me) toast('Țintește ' + (isTouch ? 'cu joystick-ul' : 'sus/jos') + ', ține ȘUT și dă drumul', 4);
+  else if (meK) toast('Ești portar: ține ' + (isTouch ? 'joystick-ul' : 'sus sau jos') + ' ca să plonjezi', 4);
+  sfx.whistle();
+}
+function soInput(h) {                                    // -1 sus, 1 jos, 0 la mijloc
+  const K = h.keys;
+  let iz = (keys.has(K.down) ? 1 : 0) - (keys.has(K.up) ? 1 : 0);
+  if (h === humans[0] && stick.mag > 0.3) iz = Math.abs(stick.z) > 0.35 ? Math.sign(stick.z) : 0;
+  return iz;
+}
+function soDecided() {
+  const g = SO.kicks.map((k) => k.filter(Boolean).length), n = SO.kicks.map((k) => k.length);
+  if (n[0] <= 5 && n[1] <= 5) {
+    if (g[0] + (5 - n[0]) < g[1]) return 1;
+    if (g[1] + (5 - n[1]) < g[0]) return 0;
+    return -1;
+  }
+  if (n[0] === n[1] && g[0] !== g[1]) return g[0] > g[1] ? 0 : 1;
+  return -1;
+}
+function soResult(scored, text) {
+  SO.phase = 'result'; SO.t = 0;
+  SO.kicks[SO.taker.team].push(scored);
+  if (scored) { game.pens[SO.taker.team]++; sfx.goal(); } else sfx.ooh();
+  updateScore();
+  const row = (t) => TEAMS[t].short + '  ' + SO.kicks[t].map((x) => (x ? '⚽' : '❌')).join(' ');
+  showMsg(text + '\n' + row(0) + '\n' + row(1), 2.2);
+}
+function shootoutStep(dt) {
+  SO.t += dt;
+  const p = SO.taker, k = SO.keeper;
+  for (const q of players) { q.kickT -= dt; q.diveT -= dt; if (q !== p && q !== k) { q.vx = q.vz = 0; } }
+  if (SO.phase === 'set') {
+    k.z = Math.sin(SO.t * 2.2) * 0.35;                  // portarul se misca pe linie
+    const h = humans.find((x) => x.team === p.team);
+    if (SO.t < 1.2) return;
+    let power = -1;
+    if (h) {
+      p.human = h; const iz = soInput(h);
+      SO.aim += (iz * 3.3 - SO.aim) * Math.min(1, 6 * dt);
+      p.fz = SO.aim / 11; p.fx = 1;
+      if (anyPressed(h.keys.shoot)) h.charging = true;
+      if (h.charging) {
+        if (anyDown(h.keys.shoot)) h.charge = Math.min(1, h.charge + dt / 0.9);
+        if (anyReleased(h.keys.shoot) || !anyDown(h.keys.shoot) || h.charge >= 1) { power = Math.max(0.2, h.charge); h.charging = false; h.charge = 0; }
+      }
+    } else if (SO.t > 2.2) {
+      power = 0.45 + Math.random() * 0.35;
+      SO.aim = Math.random() < 0.15 ? rnd(0.6) : (Math.random() < 0.5 ? -1 : 1) * (1.6 + Math.random() * 1.6);
     }
+    if (power < 0) return;
+    p.x = ball.x - 0.7;
+    shoot(p, power, SO.aim); stats.shots[p.team]--;
+    // portarul alege unde plonjeaza
+    const t = (HALF_L - 0.5 - ball.x) / (ball.vx || 1), zc = ball.z + ball.vz * t;
+    const hk = humans.find((x) => x.team === k.team);
+    if (hk) SO.diveZ = soInput(hk) * 2.8;
+    else SO.diveZ = Math.random() < 0.38 * dk(k).gk ? clamp(zc, -3.2, 3.2) : [-2.8, 0, 2.8][Math.floor(Math.random() * 3)];
+    SO.phase = 'flight'; SO.t = 0;
+    return;
+  }
+  if (SO.phase === 'flight') {
+    if (SO.t > 0.08) {                                   // plonjonul
+      const dz = SO.diveZ - k.z;
+      if (Math.abs(dz) > 0.05) { k.z += Math.sign(dz) * Math.min(Math.abs(dz), 7.5 * dt); if (k.diveT <= 0 && Math.abs(SO.diveZ) > 1) { k.diveT = 0.7; k.diveDir = Math.sign(SO.diveZ * k.fx) || 1; } }
+    }
+    const prevX = ball.x;
+    updateBall(dt);
+    if (!SO.saved && Math.abs(ball.x - k.x) < 0.6 && Math.abs(ball.z - k.z) < (k.diveT > 0 ? 1.5 : 0.9) && ball.y < 2.3) {
+      SO.saved = true;
+      ball.vx = -Math.abs(ball.vx) * 0.3; ball.vz = rnd(6); ball.vy = 2 + Math.random() * 2;
+      sfx.kick(0.3); return soResult(false, 'APĂRAT! ' + k.d.name);
+    }
+    if (!SO.saved && ball.x > HALF_L) {
+      const az = Math.abs(ball.z);
+      if (az < GOAL_W && ball.y < GOAL_H) return soResult(true, 'GOL! ' + p.d.name);
+      if (prevX <= HALF_L && az < GOAL_W + 0.25 && ball.y < GOAL_H + 0.25) { ball.vx *= -0.5; sfx.post(); return soResult(false, 'BARĂ! ' + p.d.name); }
+      return soResult(false, (ball.y >= GOAL_H ? 'Peste poartă! ' : 'Pe lângă! ') + p.d.name);
+    }
+    if (SO.t > 3) return soResult(false, 'Ratat! ' + p.d.name);
+    return;
+  }
+  // rezultat: mingea se opreste in plasa, apoi urmeaza urmatorul
+  updateBall(dt);
+  if (ball.x > HALF_L) { const kk = 1 - Math.min(1, 5 * dt); ball.vx *= kk; ball.vz *= kk; ball.x = Math.min(ball.x, HALF_L + 1.8); ball.z = clamp(ball.z, -GOAL_W + 0.2, GOAL_W - 0.2); ball.y = Math.min(ball.y, GOAL_H - 0.2); }
+  if (SO.t > 2.4) {
+    const w = soDecided();
+    if (w >= 0) { confetti(HALF_L - 10, 0); sfx.goal(); endMatch(); return; }
+    SO.turn = 1 - SO.turn; nextPenalty();
   }
 }
 
@@ -838,16 +1280,47 @@ function idleStep(dt) {                                 // dupa gol / la pauza: 
 function syncGfx(dt) {
   for (const p of players) {
     p.group.position.set(p.x, 0, p.z);
-    p.group.rotation.y = Math.atan2(p.fx, p.fz);
-    const sp = Math.hypot(p.vx, p.vz);
-    p.phase += sp * dt * 1.9;
-    const sw = Math.sin(p.phase) * Math.min(1, sp / 6) * 0.9;
-    p.legL.rotation.x = sw; p.legR.rotation.x = -sw; p.armL.rotation.x = -sw * 0.8; p.armR.rotation.x = sw * 0.8;
-    const kb = Math.min(1, sp / 6) * 1.5, cs = Math.cos(p.phase);
-    p.kneeL.rotation.x = 0.06 + Math.max(0, cs) * kb; p.kneeR.rotation.x = 0.06 + Math.max(0, -cs) * kb;
-    p.armL.rotation.z = p.armR.rotation.z = 0;
-    let rx = sp * 0.022, rz = 0, y = Math.abs(Math.sin(p.phase)) * 0.04 * Math.min(1, sp / 4);
-    if (p.kickT > 0) { const kt = 1 - p.kickT / 0.25; p.legR.rotation.x = -1.3 * Math.sin(Math.PI * kt); p.kneeR.rotation.x = kt < 0.4 ? 1.2 : 0; }
+    // intoarcere lina + aplecare in curba (ca un om care schimba directia din fuga)
+    const ang = Math.atan2(p.fx, p.fz);
+    let dAng = ang - (p.lastAng ?? ang); dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng)); p.lastAng = ang;
+    p.turn = (p.turn || 0) + ((dt > 0 ? dAng / dt : 0) - (p.turn || 0)) * Math.min(1, 8 * dt);
+    p.group.rotation.y = ang;
+    const sp = Math.hypot(p.vx, p.vz), run = Math.min(1, sp / 7);
+    // pasi in ritmul real al alergarii (~1.5 pasi duble pe secunda), nu proportionali cu viteza
+    if (sp > 0.25) p.phase += dt * (5 + sp * 0.8);
+    // ciclul de alergare al unui om (unghi pozitiv = piciorul/bratul in spate, negativ = in fata):
+    //  - coapsa urca mult in fata (genunchi sus) si merge mai putin in spate
+    //  - cand piciorul revine din spate spre fata, genunchiul se indoaie mult (calcaiul urca spre fund)
+    //  - cand piciorul e pe pamant, genunchiul e aproape drept
+    const mv = sp > 0.25 ? 1 : 0;
+    const thigh = (s) => (s > 0 ? s * (0.25 + 0.4 * run) : s * (0.3 + 0.75 * run)) * mv;
+    const knee = (ph) => 0.12 + Math.max(0, Math.sin(ph - Math.PI / 4)) * (0.5 + 1.6 * run) * mv;
+    const s1 = Math.sin(p.phase), s2 = -s1;
+    p.legL.rotation.x = thigh(s1); p.legR.rotation.x = thigh(s2);
+    p.kneeL.rotation.x = knee(p.phase); p.kneeR.rotation.x = knee(p.phase + Math.PI);
+    // bratele: invers fata de picioare, cot indoit ~90 de grade, mana vine in fata pana la piept
+    const t = performance.now() / 1000, breathe = Math.sin(t * 2.2 + p.phase) * 0.03 * (1 - run);
+    // s = piciorul de pe aceeasi parte: cand piciorul e in spate, bratul e in fata (si invers)
+    const arm = (s) => (s > 0 ? -s * (0.2 + 0.7 * run) : -s * (0.15 + 0.45 * run)) * mv;
+    p.armL.rotation.x = arm(s1) + breathe; p.armR.rotation.x = arm(s2) + breathe;
+    p.armL.rotation.z = -0.1 - 0.05 * run; p.armR.rotation.z = 0.1 + 0.05 * run;
+    const elb = -0.3 - 1.15 * run * mv;
+    p.elbowL.rotation.x = elb - Math.max(0, s1) * 0.25 * run; p.elbowR.rotation.x = elb - Math.max(0, s2) * 0.25 * run;
+    // corpul: aplecat in fata cand fuge, aplecat in curbe, sare usor la fiecare pas (de doua ori pe ciclu), respira cand sta
+    let rx = 0.03 + run * 0.22, rz = clamp(-p.turn * 0.06 * run, -0.3, 0.3);
+    let y = (Math.abs(s1) * 0.07 - 0.02) * run + breathe * 0.2;   // sus cand picioarele sunt departate (in zbor), jos cand se incruciseaza
+    p.body.rotation.y = -s1 * 0.08 * run;                 // umerii se rasucesc invers fata de solduri
+    if (p.kickT > 0) {                                   // sut: piciorul merge mult in fata, bratele se deschid pentru echilibru
+      const kt = 1 - p.kickT / 0.35;
+      p.legR.rotation.x = -1.6 * Math.sin(Math.PI * (0.3 + 0.7 * kt)); p.kneeR.rotation.x = kt < 0.15 ? 0.6 : 0.05;
+      p.legL.rotation.x = 0.15; p.kneeL.rotation.x = 0.25;
+      p.armL.rotation.z = -0.9; p.armR.rotation.z = 0.6; p.armL.rotation.x = -0.4; rx = -0.22;
+    }
+    if (p.trickT > 0) {                                  // braziliana: calcaiul urca pe la spate si arunca mingea peste cap
+      const tt = Math.sin(Math.PI * (1 - p.trickT / 0.45));
+      p.legR.rotation.x = 0.55 * tt; p.kneeR.rotation.x = 0.2 + 2.2 * tt; p.legL.rotation.x = -0.1; p.kneeL.rotation.x = 0.3;
+      p.armL.rotation.z = -0.7; p.armR.rotation.z = 0.7; rx = 0.25; y += 0.08 * tt;
+    }
     if (p.lungeT > 0) { rx = -1.2; y = 0.12; p.legL.rotation.x = -0.2; p.legR.rotation.x = -0.5; p.kneeL.rotation.x = 0.9; p.kneeR.rotation.x = 0; }
     else if (p.stunT > 0) { rx = -0.5; }
     if (p.isGK) {
@@ -859,6 +1332,19 @@ function syncGfx(dt) {
     p.body.rotation.x += (rx - p.body.rotation.x) * Math.min(1, 14 * dt);
     p.body.rotation.z += (rz - p.body.rotation.z) * Math.min(1, 14 * dt);
     p.body.position.y = y;
+    if (p.man && useMan) {                               // manechinul: miscari filmate + aplecari pentru alunecare, plonjon, sarituri
+      animateMannequin(p.man, sp, dt);
+      const r = p.man.root, special = p.lungeT > 0 || p.stunT > 0 || (p.isGK && p.diveT > 0);
+      r.rotation.x = special ? p.body.rotation.x : 0; r.rotation.z = p.body.rotation.z;
+      r.position.y = p.jumpT > 0 || special || p.trickT > 0 ? p.body.position.y : 0;
+      const b = p.man.bones;
+      if (p.kickT > 0 && b.rUpLeg) {                     // sut: piciorul drept merge in fata peste animatie
+        const kt = 1 - p.kickT / 0.35, k = Math.sin(Math.PI * (0.3 + 0.7 * kt));
+        b.rUpLeg.rotation.x -= 1.4 * k; if (b.rLeg) b.rLeg.rotation.x += kt < 0.15 ? 0.6 : 0.05;
+      }
+      if (p.trickT > 0 && b.rLeg) { const tt = Math.sin(Math.PI * (1 - p.trickT / 0.45)); b.rLeg.rotation.x += 2.0 * tt; if (b.rUpLeg) b.rUpLeg.rotation.x += 0.5 * tt; }
+      if (((game.state === 'goal' && p === game.scorer) || ball.throwIn === p || (p.isGK && p.diveT > 0)) && b.lArm && b.rArm) { b.lArm.rotation.z -= 1.2; b.rArm.rotation.z += 1.2; }
+    }
   }
   ballGfx.mesh.position.set(ball.x, ball.y + 0.05, ball.z);
   ballGfx.shadow.position.set(ball.x, 0.025, ball.z);
@@ -875,15 +1361,23 @@ function syncGfx(dt) {
   const fast = !ball.owner && game.state !== 'replay' && Math.hypot(ball.vx, ball.vz) > 17;
   trail.forEach((m, i) => { const h = hist[(i + 1) * 2]; m.visible = fast && !!h; if (m.visible) m.position.set(h[0], h[1] + 0.05, h[2]); });
   updateConfetti(dt);
+  if (offT > 0) { offT -= dt; offMesh.material.opacity = Math.min(0.9, offT); if (offT <= 0) offMesh.visible = false; }
   const bounce = game.state === 'goal' ? Math.abs(Math.sin(performance.now() / 110)) * 0.012 : 0;      // publicul sare la gol
   for (const t of world.crowdTex) t.offset.y = bounce;
-  const k = Math.min(1, 3.5 * dt), celeb = game.state === 'goal' && game.scorer;
-  const tx = celeb ? clamp(celeb.x, -44, 44) : clamp(ball.x, -36, 36), tz = celeb ? celeb.z : ball.z;
+  for (const t of world.ledTex) t.offset.x = (t.offset.x + dt * 0.03) % 1;   // reclamele de pe panouri curg
+  const k = Math.min(1, (camTV ? 5 : 3.5) * dt), celeb = game.state === 'goal' && game.scorer;
+  const so = game.state === 'shootout' || (game.state === 'end' && game.pens);
+  // camera TV e mai aproape, deci trebuie sa urmareasca mingea si spre margini si spre porti
+  const xl = camTV ? 46 : 36, follow = camTV ? 1 : 0.6;
+  const fa = game.fkAim;                                  // la lovitura libera camera arata si mingea si poarta
+  const tx = celeb ? clamp(celeb.x, -44, 44) : so ? HALF_L - 6 : fa ? clamp((ball.x + fa.gx) / 2, -46, 46) : clamp(ball.x, -xl, xl), tz = celeb ? celeb.z : so ? 0 : fa ? ball.z / 2 : ball.z;
   cam.x += (tx - cam.x) * k; cam.z += (tz - cam.z) * k;
-  cam.lz += ((celeb ? tz : tz * 0.45) - cam.lz) * k;
-  cam.zoom += ((celeb ? 0.55 : game.state === 'replay' ? 0.6 : 1) - cam.zoom) * Math.min(1, 2 * dt);
-  camera.position.set(cam.x, 25 * CZ * cam.zoom, cam.lz + (45 * CZ - cam.z * 0.15) * cam.zoom);
+  cam.lz += ((celeb ? tz : tz * follow) - cam.lz) * k;
+  cam.zoom += ((celeb ? 0.55 : fa ? (camTV ? 1.35 : 0.85) : so ? 0.45 : game.state === 'replay' ? 0.6 : 1) - cam.zoom) * Math.min(1, 2 * dt);
+  const [ch, cd] = camTV ? [13, 27] : [25, 45];          // TV: ca la televizor, mai jos si mai aproape
+  camera.position.set(cam.x, ch * CZ * cam.zoom, cam.lz + (cd * CZ - cam.z * 0.15) * cam.zoom);
   camera.lookAt(cam.x, celeb ? 1 : 0, cam.lz);
+  if (closeup) { const q = squad[0][closeup]; camera.position.set(q.x + q.fx * 2.6 + 0.6, 1.9, q.z + q.fz * 2.6 + 0.6); camera.lookAt(q.x, 1.4, q.z); }   // test: vezi un jucator de aproape
   world.sun.position.set(cam.x - 40, 80, 50); world.sun.target.position.set(cam.x, 0, 0);
 }
 
@@ -892,6 +1386,7 @@ const demo = new URLSearchParams(location.search).has('demo');
 const autoMode = +new URLSearchParams(location.search).get('mode');
 if (autoMode === 1 || autoMode === 2) startMatch(autoMode);
 if (demo) { $('menu').classList.add('hidden'); game.state = 'play'; kickoff(0); }
+if (new URLSearchParams(location.search).has('pens') && game.state === 'play') { game.half = 4; startShootout(); }   // test: direct la penalty-uri
 
 const SNAP = 11;
 function record() {
@@ -917,7 +1412,8 @@ function tick(dt, now) {
     if (game.timer <= 0) {
       if (game.state === 'goal' && rec.length > 90) { game.state = 'replay'; game.rp = Math.max(0, rec.length - 230); toast('🎬 Reluare', 99); }
       else {
-        if (game.state === 'break') { game.half = 2; game.time = 0; game.kick = 1; for (const p of allPlayers) p.sign = -p.sign; }
+        if (game.state === 'break' && game.next === 'shootout') { game.next = null; startShootout(); return endTick(dt); }
+        if (game.state === 'break') { game.half++; game.time = 0; game.kick = game.half % 2 === 0 ? 1 : 0; newPeriod(); for (const p of allPlayers) p.sign = -p.sign; }
         game.state = 'play'; kickoff(game.kick);
       }
     }
@@ -925,9 +1421,15 @@ function tick(dt, now) {
     game.rp += dt * 60 * 0.5;
     if (game.rp >= rec.length - 1 || pressed.size) { toast('', 0); game.state = 'play'; kickoff(game.kick); }
     else applySnap(rec[game.rp | 0]);
+  } else if (game.state === 'shootout') {
+    for (const p of players) p.human = null;
+    shootoutStep(dt);
   } else if (game.state === 'menu') {
     cam.x = Math.sin(now / 6000) * 25;                   // camera se plimba in meniu
   }
+  endTick(dt);
+}
+function endTick(dt) {
   pressed.clear(); released.clear();
   syncGfx(dt); updateHud(); updateTouchUi(); drawRadar();
 }
@@ -958,4 +1460,52 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__game = { game, ball, players, tick, log, humans, stats, keys };
+window.__game = { game, ball, players, tick, log, humans, stats, keys, pressed, released };
+if (new URLSearchParams(location.search).has('fktest')) {       // test: fault langa careu pentru echipa omului
+  const res = [], dt = 1 / 60;
+  try {
+    startMatch(1); for (let i = 0; i < 100; i++) tick(dt, 0);
+    const me = humans[0].team, opp = squad[1 - me][6], victim = squad[me][9], side = squad[1 - me][0].sign;
+    ball.x = -side * (HALF_L - 24); ball.z = 4; victim.x = ball.x; victim.z = ball.z; setOwner(victim);
+    foul(opp, victim, false);
+    res.push('panel=' + !$('fkPanel').classList.contains('hidden') + ' rows=' + $('fkList').children.length + ' best=' + $('fkList').firstElementChild.textContent);
+    $('fkList').firstElementChild.click();
+    res.push('aim=' + !!game.fkAim + ' taker=' + (game.fkAim && game.fkAim.taker.d.name));
+    for (let i = 0; i < 160; i++) tick(dt, 0);
+    if (new URLSearchParams(location.search).get('fktest') === 'aim') { game.fkAim.curve = 0.35; game.fkAim.aimZ = -2; throw new Error('stop-aim'); }
+    keys.add('KeyG'); pressed.add('KeyG'); for (let i = 0; i < 40; i++) tick(dt, 0); keys.delete('KeyG'); released.add('KeyG');
+    for (let i = 0; i < 50; i++) tick(dt, 0);
+    res.push('after: aim=' + !!game.fkAim + ' owner=' + (ball.owner ? ball.owner.d.name : 'none') + ' ballv=' + Math.hypot(ball.vx, ball.vz).toFixed(1) + ' curve=' + (ball.curve || 0).toFixed(2) + ' dots=' + fkDots.visible);
+    for (let i = 0; i < 120; i++) tick(dt, 0);
+    res.push('score=' + game.score.join('-') + ' log=' + log.slice(-3).join(' / '));
+  } catch (e) { res.push('ERR ' + e.stack); }
+  const pre = document.createElement('pre'); pre.id = 'simout'; pre.textContent = res.join(' | '); document.body.append(pre);
+}
+if (new URLSearchParams(location.search).has('subtest')) {      // test: deschide echipa si face o schimbare
+  const res = [];
+  try {
+    startMatch(1); for (let i = 0; i < 30; i++) tick(1 / 60, 0);
+    openTeam(true);
+    const before = squad[0][9].d.name;
+    $('tpField').querySelector('[data-i="9"]').click(); $('tpBench').querySelector('[data-i="4"]').click();
+    res.push(before + ' -> ' + squad[0][9].d.name + ' subs=' + subsUsed[0] + ' benchOut=' + bench[0][4].d.name + '/' + bench[0][4].out + ' paused=' + game.paused);
+    $('tpField').querySelector('[data-i="0"]').click(); $('tpBench').querySelector('[data-i="1"]').click();
+    res.push('gk-check subs=' + subsUsed[0] + ' toast=' + $('toast').textContent);
+  } catch (e) { res.push('ERR ' + e.stack); }
+  const pre = document.createElement('pre'); pre.id = 'simout'; pre.textContent = res.join(' | '); document.body.append(pre);
+}
+if (new URLSearchParams(location.search).has('tricktest')) {     // test: apasa SPRINT de 2 ori cu mingea la picior
+  const res = [], dt = 1 / 60;
+  try {
+    startMatch(1);
+    for (let i = 0; i < 120; i++) tick(dt, 0);
+    pressed.add('KeyF'); tick(dt, 0);
+    for (let i = 0; i < 60; i++) tick(dt, 0);
+    setOwner(humans[0].ctrl); ball.protectT = 3; ball.freeKick = null;
+    res.push('owner=' + (ball.owner ? ball.owner.d.name + '/t' + ball.owner.team : 'none') + ' ctrl=' + humans[0].ctrl.d.name + ' state=' + game.state + ' fk=' + !!ball.freeKick);
+    const tap = () => { keys.add('ShiftLeft'); pressed.add('ShiftLeft'); tick(dt, 0); keys.delete('ShiftLeft'); released.add('ShiftLeft'); tick(dt, 0); };
+    tap(); for (let i = 0; i < 6; i++) tick(dt, 0); tap();
+    res.push('after: trickT=' + (ball.trickT || 0).toFixed(2) + ' y=' + ball.y.toFixed(2) + ' owner=' + (ball.owner ? ball.owner.d.name : 'none') + ' tapT=' + (humans[0].tapT || 0).toFixed(2));
+  } catch (e) { res.push('ERR ' + e.stack); }
+  const pre = document.createElement('pre'); pre.id = 'simout'; pre.textContent = res.join(' | '); document.body.append(pre);
+}

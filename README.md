@@ -6,6 +6,8 @@ Joc de fotbal 3D care rulează în browser, pe calculator și pe telefon. Făcut
 
 Pe Mac: dublu-click pe `start.command`. Se deschide singur în browser, iar în fereastra de terminal apare și adresa pentru telefon (telefonul trebuie să fie pe același Wi-Fi).
 
+Pe Windows: dublu-click pe `start.bat`. Se deschide singur în browser. Nu închide fereastra neagră cât timp joci.
+
 Pe orice alt sistem, din folderul jocului:
 
 ```

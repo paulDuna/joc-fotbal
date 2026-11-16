@@ -13,12 +13,26 @@ function canvasTex(w, h, draw) {
 function pitchTexture() {
   const S = 20;
   return canvasTex(105 * S, 68 * S, (g, W, H) => {
-    for (let i = 0; i < 14; i++) { g.fillStyle = i % 2 ? '#3d8c38' : '#479a41'; g.fillRect(i * W / 14, 0, W / 14 + 1, H); }
-    for (let i = 0; i < 70000; i++) {
-      g.fillStyle = Math.random() < 0.5 ? 'rgba(0,40,0,0.06)' : 'rgba(210,255,180,0.05)';
-      g.fillRect(Math.random() * W, Math.random() * H, 2, 5);
+    // iarba tunsa in dungi, ca pe stadioanele mari, cu margini moi intre dungi
+    const N = 18;
+    for (let i = 0; i < N; i++) {
+      const x0 = i * W / N, gr = g.createLinearGradient(x0, 0, x0 + W / N, 0);
+      const c = i % 2 ? ['#2f7a2c', '#337f2f'] : ['#3f8f39', '#43933c'];
+      gr.addColorStop(0, c[0]); gr.addColorStop(0.5, c[1]); gr.addColorStop(1, c[0]);
+      g.fillStyle = gr; g.fillRect(x0, 0, W / N + 1, H);
     }
+    for (let j = 0; j < 12; j++) if (j % 2) { g.fillStyle = 'rgba(255,255,240,0.03)'; g.fillRect(0, j * H / 12, W, H / 12 + 1); }   // si putin in carouri
+    // fire de iarba de nuante diferite
+    const blades = ['rgba(10,50,10,0.10)', 'rgba(200,255,160,0.06)', 'rgba(60,110,30,0.10)', 'rgba(20,70,25,0.12)'];
+    for (let i = 0; i < 170000; i++) { g.fillStyle = blades[i & 3]; g.fillRect(Math.random() * W, Math.random() * H, 1, 2 + Math.random() * 3); }
     const X = m => (m + 52.5) * S, Z = m => (m + 34) * S;
+    // iarba mai uzata in fata portilor si la mijloc
+    const wear = (x, z, rx, a) => {
+      const gr = g.createRadialGradient(X(x), Z(z), 0, X(x), Z(z), rx * S);
+      gr.addColorStop(0, 'rgba(125,115,60,' + a + ')'); gr.addColorStop(1, 'rgba(125,115,60,0)');
+      g.fillStyle = gr; g.fillRect(X(x) - rx * S, Z(z) - rx * S, rx * 2 * S, rx * 2 * S);
+    };
+    wear(-50, 0, 6, 0.35); wear(50, 0, 6, 0.35); wear(-41.5, 0, 3, 0.25); wear(41.5, 0, 3, 0.25); wear(0, 0, 10, 0.12);
     g.strokeStyle = 'rgba(255,255,255,0.92)'; g.fillStyle = 'rgba(255,255,255,0.92)'; g.lineWidth = 3;
     g.strokeRect(2, 2, W - 4, H - 4);
     g.beginPath(); g.moveTo(X(0), 0); g.lineTo(X(0), H); g.stroke();
@@ -42,15 +56,18 @@ function pitchTexture() {
 function crowdTexture() {
   const t = canvasTex(512, 256, (g, W, H) => {
     g.fillStyle = '#20242c'; g.fillRect(0, 0, W, H);
-    const cols = ['#d33', '#36c', '#eee', '#fc3', '#2a2', '#888', '#c7a', '#f80', '#345'];
-    for (let y = 6; y < H; y += 11) {
-      g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, y + 5, W, 3);
-      for (let x = 4 + (y % 2) * 4; x < W; x += 8) {
-        if (Math.random() < 0.12) continue;
-        g.fillStyle = cols[(Math.random() * cols.length) | 0];
-        g.fillRect(x, y - 3, 5, 6);
-        g.fillStyle = ['#f0c8a0', '#c68e5e', '#7a4a2a'][(Math.random() * 3) | 0];
-        g.fillRect(x + 1, y - 6, 3, 3);
+    // suporterii: in stanga mai multi albastri, in dreapta mai multi rosii, plus cativa neutri
+    const other = ['#eee', '#fc3', '#2a2', '#888', '#111', '#f80'];
+    for (let y = 5; y < H; y += 8) {
+      g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, y + 4, W, 2);
+      for (let x = 3 + (y % 2) * 3; x < W; x += 6) {
+        if (Math.random() < 0.06) continue;
+        const r = Math.random(), blue = x / W < 0.5 ? 0.6 : 0.15;
+        g.fillStyle = r < blue ? '#1f5fd6' : r < 0.78 ? '#d62828' : other[(Math.random() * other.length) | 0];
+        g.fillRect(x, y - 2, 4, 5);
+        g.fillStyle = ['#f0c8a0', '#c68e5e', '#7a4a2a', '#e8b890'][(Math.random() * 4) | 0];
+        g.fillRect(x + 1, y - 5, 2, 3);
+        if (Math.random() < 0.05) { g.fillStyle = Math.random() < 0.5 ? '#1f5fd6' : '#d62828'; g.fillRect(x - 2, y - 9, 8, 4); }   // steaguri / esarfe
       }
     }
   });
@@ -102,11 +119,19 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
   const crowdTex = [];
 
-  const outer = new THREE.Mesh(new THREE.PlaneGeometry(260, 200), new THREE.MeshStandardMaterial({ color: 0x357d31, roughness: 1 }));
+  const outer = new THREE.Mesh(new THREE.PlaneGeometry(260, 200), new THREE.MeshStandardMaterial({ color: 0x2f7429, roughness: 1 }));
   outer.rotation.x = -Math.PI / 2; outer.position.y = -0.02; outer.receiveShadow = true; scene.add(outer);
 
   const pt = pitchTexture(); pt.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const pitch = new THREE.Mesh(new THREE.PlaneGeometry(105, 68), new THREE.MeshStandardMaterial({ map: pt, roughness: 1 }));
+  // relief fin de iarba (se repeta des), ca lumina sa nu para "de plastic"
+  const det = new THREE.CanvasTexture((() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+    g.fillStyle = '#808080'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 9000; i++) { const v = (100 + Math.random() * 120) | 0; g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(Math.random() * 256, Math.random() * 256, 1, 3); }
+    return c;
+  })());
+  det.wrapS = det.wrapT = THREE.RepeatWrapping; det.repeat.set(70, 45); det.anisotropy = pt.anisotropy;
+  const pitch = new THREE.Mesh(new THREE.PlaneGeometry(105, 68), new THREE.MeshStandardMaterial({ map: pt, bumpMap: det, bumpScale: 0.8, roughness: 0.92 }));
   pitch.rotation.x = -Math.PI / 2; pitch.receiveShadow = true; scene.add(pitch);
 
   const netTex = netTexture();
@@ -121,8 +146,14 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(len, H), new THREE.MeshBasicMaterial({ map: tex }));
     m.rotation.x = -0.75; m.position.y = 1.5 + (H / 2) * Math.cos(0.75); m.position.z = -(H / 2) * Math.sin(0.75);
     grp.add(m);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(len, 0.6, 14), new THREE.MeshStandardMaterial({ color: 0x39404d }));
-    roof.position.set(0, 21, -15); grp.add(roof);
+    // inelul de sus al tribunei, cu un brau intunecat intre ele
+    const band = new THREE.Mesh(new THREE.BoxGeometry(len, 2.4, 1), new THREE.MeshStandardMaterial({ color: 0x1b1f27 }));
+    band.position.set(0, 20.2, -16.9); grp.add(band);
+    const tex2 = crowd.clone(); tex2.needsUpdate = true; tex2.repeat.set(len / 30, 0.8); tex2.offset.x = 0.37; crowdTex.push(tex2);
+    const H2 = 14, up = new THREE.Mesh(new THREE.PlaneGeometry(len, H2), new THREE.MeshBasicMaterial({ map: tex2 }));
+    up.rotation.x = -0.75; up.position.set(0, 21.4 + (H2 / 2) * Math.cos(0.75), -17.4 - (H2 / 2) * Math.sin(0.75)); grp.add(up);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(len, 0.6, 20), new THREE.MeshStandardMaterial({ color: 0x39404d }));
+    roof.position.set(0, 33.5, -24); grp.add(roof);
     const base = new THREE.Mesh(new THREE.BoxGeometry(len, 1.5, 1), new THREE.MeshStandardMaterial({ color: 0x2a2f3a }));
     base.position.set(0, 0.75, 0.4); grp.add(base);
     scene.add(grp);
@@ -142,6 +173,7 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
     }
   });
   adTex.wrapS = THREE.RepeatWrapping; adTex.repeat.set(2, 1);
+  const ledTex = [adTex];                                  // panourile LED se misca (vezi main.js)
   const ads = new THREE.Mesh(new THREE.PlaneGeometry(110, 1), new THREE.MeshBasicMaterial({ map: adTex }));
   ads.position.set(0, 0.5, -HALF_W - 4); scene.add(ads);
 
@@ -155,7 +187,7 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
 
   // panouri in spatele portilor
   for (const sx of [-1, 1]) {
-    const t2 = adTex.clone(); t2.needsUpdate = true; t2.repeat.set(1, 1);
+    const t2 = adTex.clone(); t2.needsUpdate = true; t2.repeat.set(1, 1); ledTex.push(t2);
     const b = new THREE.Mesh(new THREE.PlaneGeometry(56, 1), new THREE.MeshBasicMaterial({ map: t2 }));
     b.rotation.y = -sx * Math.PI / 2; b.position.set(sx * (HALF_L + 5), 0.5, 0); scene.add(b);
   }
@@ -170,7 +202,7 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
       const l = new THREE.Mesh(new THREE.CircleGeometry(0.9, 10), lamp); l.position.set(-3.9 + i * 2.6, -2.1 + j * 2.1, 0.45); head.add(l);
     }
   }
-  return { sun, crowdTex };
+  return { sun, crowdTex, ledTex };
 }
 
 // ---------- minge ----------
@@ -195,19 +227,32 @@ function mat(color) {
   if (!matCache.has(color)) matCache.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.8 }));
   return matCache.get(color);
 }
+const skinCache = new Map();
+function skinMat(color) {                               // pielea luceste putin, nu e mata ca tricoul
+  if (!skinCache.has(color)) skinCache.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.55 }));
+  return skinCache.get(color);
+}
 function geos() {
   if (G.torso) return G;
-  G.torso = new THREE.CapsuleGeometry(0.17, 0.3, 4, 10);
-  G.shorts = new THREE.CylinderGeometry(0.2, 0.215, 0.26, 10);
-  G.thigh = new THREE.CapsuleGeometry(0.078, 0.3, 3, 8);
-  G.shin = new THREE.CapsuleGeometry(0.06, 0.3, 3, 8);
-  G.boot = new THREE.BoxGeometry(0.12, 0.08, 0.27);
-  G.sleeve = new THREE.CapsuleGeometry(0.062, 0.12, 3, 8);
-  G.arm = new THREE.CapsuleGeometry(0.045, 0.3, 3, 8);
-  G.head = new THREE.SphereGeometry(0.125, 14, 10);
-  G.hand = new THREE.SphereGeometry(0.052, 8, 6);
-  G.hair = new THREE.SphereGeometry(0.132, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5);
-  G.neck = new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8);
+  // corpul e facut din forme rotunjite, netede (multe segmente), nu din cutii
+  const V = (x, y) => new THREE.Vector2(x, y);
+  G.torso = new THREE.LatheGeometry([V(0, 0), V(0.15, 0), V(0.16, 0.1), V(0.185, 0.28), V(0.2, 0.4), V(0.195, 0.47), V(0.16, 0.54), V(0.1, 0.6), V(0.06, 0.63), V(0, 0.63)], 28);   // talie -> piept -> umeri
+  G.shorts = new THREE.LatheGeometry([V(0, 0), V(0.17, 0), V(0.185, 0.1), V(0.17, 0.25), V(0, 0.25)], 24);   // soldurile (de jos in sus, ca sa se vada din afara)
+  G.shortsLeg = new THREE.CylinderGeometry(0.1, 0.097, 0.22, 18);                                            // cracul pantalonului, se misca odata cu piciorul
+  G.thigh = new THREE.CapsuleGeometry(0.08, 0.28, 8, 16);
+  G.shin = new THREE.CapsuleGeometry(0.06, 0.3, 8, 16);
+  G.sockTop = new THREE.CylinderGeometry(0.068, 0.068, 0.05, 16);
+  G.boot = new THREE.SphereGeometry(0.07, 18, 12);
+  G.sleeve = new THREE.CylinderGeometry(0.066, 0.056, 0.2, 16);
+  G.upperArm = new THREE.CapsuleGeometry(0.05, 0.16, 8, 14);
+  G.foreArm = new THREE.CapsuleGeometry(0.042, 0.15, 8, 14);
+  G.head = new THREE.SphereGeometry(0.12, 28, 20);
+  G.nose = new THREE.SphereGeometry(0.022, 10, 8);
+  G.ear = new THREE.SphereGeometry(0.03, 10, 8);
+  G.hand = new THREE.SphereGeometry(0.042, 14, 10);
+  G.hair = new THREE.SphereGeometry(0.128, 28, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  G.neck = new THREE.CylinderGeometry(0.05, 0.055, 0.12, 16);
+  G.collar = new THREE.TorusGeometry(0.068, 0.016, 8, 24);
   G.shadow = new THREE.CircleGeometry(0.42, 16);
   G.shadowMat = new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.32, depthWrite: false });
   return G;
@@ -222,41 +267,116 @@ function numberTexture(num, colorHex) {
   });
 }
 
-export function makePlayerMesh(scene, { shirt, shorts, socks, skinTone, hair, num }) {
+// fata pictata pe cap: pe sfera, fata (+z) e la u = 0.25, adica x = 64 din 256; ochii ~y 58, gura ~y 76
+function faceTexture(skinHex, hairHex, seed, beard) {
+  const css = (h) => '#' + h.toString(16).padStart(6, '0');
+  const t = canvasTex(256, 128, (g) => {
+    g.fillStyle = css(skinHex); g.fillRect(0, 0, 256, 128);
+    const cx = 64;
+    // umbre usoare: obraji si sub barbie, ca fata sa aiba volum
+    let gr = g.createRadialGradient(cx, 66, 4, cx, 66, 40); gr.addColorStop(0, 'rgba(255,255,255,0.10)'); gr.addColorStop(1, 'rgba(0,0,0,0.10)');
+    g.fillStyle = gr; g.fillRect(cx - 50, 30, 100, 70);
+    for (const s of [-1, 1]) { gr = g.createRadialGradient(cx + s * 13, 70, 1, cx + s * 13, 70, 8); gr.addColorStop(0, 'rgba(200,80,70,0.18)'); gr.addColorStop(1, 'rgba(200,80,70,0)'); g.fillStyle = gr; g.fillRect(cx + s * 13 - 8, 62, 16, 16); }
+    const iris = ['#4a2e1a', '#2b1a10', '#3d6b8c', '#5a7a3a'][seed % 4];
+    for (const s of [-1, 1]) {
+      const ex = cx + s * 9.5, ey = 57;
+      g.fillStyle = 'rgba(0,0,0,0.18)'; g.beginPath(); g.ellipse(ex, ey - 1, 5.5, 3.6, 0, 0, Math.PI * 2); g.fill();      // orbita
+      g.fillStyle = '#f4f1ea'; g.beginPath(); g.ellipse(ex, ey, 4.4, 2.5, 0, 0, Math.PI * 2); g.fill();                  // albul ochiului
+      g.fillStyle = iris; g.beginPath(); g.arc(ex, ey, 2.1, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#080808'; g.beginPath(); g.arc(ex, ey, 1.0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.9)'; g.fillRect(ex + 0.6, ey - 1.2, 1, 1);
+      g.strokeStyle = 'rgba(20,10,5,0.75)'; g.lineWidth = 1; g.beginPath(); g.ellipse(ex, ey, 4.4, 2.5, 0, Math.PI, Math.PI * 2); g.stroke();   // pleoapa
+      g.strokeStyle = css(hairHex); g.lineWidth = 2.2; g.lineCap = 'round';                                              // spranceana
+      g.beginPath(); g.moveTo(ex - s * 4.5, ey - 5.2); g.quadraticCurveTo(ex, ey - 7.2, ex + s * 5, ey - 5.5); g.stroke();
+    }
+    if (beard) {                                          // barba pictata: pe falci, barbie si mustata, nu o masca
+      const c = new THREE.Color(hairHex), rgb = `${(c.r * 255) | 0},${(c.g * 255) | 0},${(c.b * 255) | 0}`;
+      g.filter = 'blur(1.5px)';                            // margini moi, ca firele de par
+      g.fillStyle = `rgba(${rgb},0.6)`;
+      g.beginPath(); g.moveTo(cx - 24, 62); g.quadraticCurveTo(cx - 22, 92, cx, 96); g.quadraticCurveTo(cx + 22, 92, cx + 24, 62);
+      g.lineTo(cx + 18, 64); g.quadraticCurveTo(cx + 14, 82, cx, 84); g.quadraticCurveTo(cx - 14, 82, cx - 18, 64); g.closePath(); g.fill();
+      g.beginPath(); g.ellipse(cx, 74, 8, 2.4, 0, 0, Math.PI * 2); g.fill();                                                                       // mustata
+      g.fillStyle = `rgba(${rgb},0.35)`; g.beginPath(); g.ellipse(cx, 84, 13, 9, 0, 0, Math.PI * 2); g.fill();                                     // barbie
+      g.filter = 'none';
+    }
+    g.strokeStyle = 'rgba(0,0,0,0.14)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(cx - 3, 69); g.quadraticCurveTo(cx, 71, cx + 3, 69); g.stroke();   // nari
+    g.fillStyle = 'rgba(150,60,55,0.75)'; g.beginPath(); g.ellipse(cx, 77, 6, 1.8, 0, 0, Math.PI * 2); g.fill();                                   // buze
+    g.strokeStyle = 'rgba(60,20,15,0.7)'; g.lineWidth = 0.9; g.beginPath(); g.moveTo(cx - 6, 77); g.quadraticCurveTo(cx, 78.2, cx + 6, 77); g.stroke();
+  });
+  return t;
+}
+
+// frizuri: 'short' (implicit), 'buzz' (tuns scurt), 'bald' (ras), 'long' (par lung), 'bun' (coc), 'afro' (par cret bogat)
+function addHair(body, add, style, hairMat) {
+  if (!G.afro) {
+    G.afro = new THREE.SphereGeometry(0.17, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.6);
+    G.longBack = new THREE.CapsuleGeometry(0.1, 0.16, 3, 8);
+    G.bun = new THREE.SphereGeometry(0.06, 10, 8);
+    G.beard = new THREE.SphereGeometry(0.129, 14, 8, Math.PI * 0.05, Math.PI * 0.9, Math.PI * 0.55, Math.PI * 0.3);   // partea din fata, jos
+    G.eye = new THREE.SphereGeometry(0.018, 6, 5);
+    G.brow = new THREE.BoxGeometry(0.05, 0.012, 0.012);
+  }
+  if (style === 'bald') return;
+  // calota de par e inclinata spre spate, ca sa lase fruntea si ochii liberi
+  if (style === 'afro') { const a = add(G.afro, hairMat, 0, 1.75, -0.02); a.scale.set(1, 1.05, 1); a.rotation.x = -0.4; return; }
+  const cap = add(G.hair, hairMat, 0, 1.735, -0.008);
+  cap.rotation.x = -0.45;
+  cap.scale.set(style === 'buzz' ? 0.955 : 1.0, style === 'buzz' ? 1.08 : 1.15, style === 'buzz' ? 1.0 : 1.05);
+  if (style === 'long') add(G.longBack, hairMat, 0, 1.66, -0.08).scale.set(1.2, 1, 0.6);
+  if (style === 'bun') add(G.bun, hairMat, 0, 1.87, -0.09);
+}
+
+export function makePlayerMesh(scene, { shirt, shorts, socks, skinTone, hair, num, style, beard }) {
   const g = geos();
   const skin = mat(SKIN[skinTone] ?? SKIN[0]);
   const group = new THREE.Group(), body = new THREE.Group();
   group.add(body);
   const add = (geo, m, x, y, z, parent = body) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); parent.add(o); return o; };
 
-  add(g.torso, mat(shirt), 0, 1.27, 0).scale.set(1.25, 1, 0.75);
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.28), new THREE.MeshBasicMaterial({ map: numberTexture(num, shirt) }));
-  back.rotation.y = Math.PI; back.position.set(0, 1.3, -0.135); body.add(back);
-  add(g.shorts, mat(shorts), 0, 0.92, 0).scale.set(1, 1, 0.75);
-  add(g.neck, skin, 0, 1.6, 0);
-  add(g.head, skin, 0, 1.72, 0);
-  add(g.hair, mat(hair ?? 0x18120e), 0, 1.73, -0.01);
+  const skin2 = skinMat(SKIN[skinTone] ?? SKIN[0]);
+  add(g.torso, mat(shirt), 0, 0.98, 0).scale.set(1.12, 1, 0.7);
+  const numTex = numberTexture(num, shirt);
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.26), new THREE.MeshBasicMaterial({ map: numTex }));
+  back.rotation.y = Math.PI; back.position.set(0, 1.3, -0.137); body.add(back);
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.1), new THREE.MeshBasicMaterial({ map: numTex }));
+  front.position.set(0.07, 1.42, 0.142); body.add(front);
+  add(g.collar, mat(shorts === shirt ? 0xffffff : shorts), 0, 1.59, 0).rotation.x = Math.PI / 2;
+  add(g.shorts, mat(shorts), 0, 0.86, 0).scale.set(1.05, 1, 0.75);
+  add(g.neck, skin2, 0, 1.62, 0);
+  const faceMat = new THREE.MeshStandardMaterial({ map: faceTexture(SKIN[skinTone] ?? SKIN[0], hair ?? 0x18120e, num, beard), roughness: 0.55 });
+  add(g.head, faceMat, 0, 1.73, 0).scale.set(0.95, 1.1, 1);
+  add(G.nose, skin2, 0, 1.718, 0.115).scale.set(0.6, 0.95, 0.75);
+  for (const sx of [-1, 1]) add(G.ear, skin2, sx * 0.112, 1.725, 0).scale.set(0.4, 1, 0.7);
+  const hairMat = mat(hair ?? 0x18120e);
+  addHair(body, add, style, hairMat);
 
+  const BOOTS = [0x111111, 0xffffff, 0xff4fa3, 0x29e3ff, 0xc6ff2e, 0xff7a1a, 0xffd400, 0x111111];
+  const bootMat = mat(BOOTS[(num * 7 + skinTone) % BOOTS.length]);   // ghete colorate, ca la profesionisti
   const pivot = (x, y, parent = body) => { const p = new THREE.Group(); p.position.set(x, y, 0); parent.add(p); return p; };
   const leg = (x) => {
     const hip = pivot(x, 0.92);
-    add(g.thigh, skin, 0, -0.22, 0, hip);
+    add(g.thigh, skin2, 0, -0.22, 0, hip);
+    add(g.shortsLeg, mat(shorts), 0, -0.07, 0, hip);
     const knee = pivot(0, -0.45, hip);
-    add(g.shin, mat(socks), 0, -0.2, 0, knee); add(g.boot, mat(0x111111), 0, -0.43, 0.06, knee);
+    add(g.shin, mat(socks), 0, -0.2, 0, knee);
+    add(g.sockTop, mat(0xf2f2f2), 0, -0.04, 0, knee);
+    add(g.boot, bootMat, 0, -0.44, 0.05, knee).scale.set(0.9, 0.6, 2.0);
     return [hip, knee];
   };
-  const arm = (x) => {
+  const arm = (x) => {                                    // umar -> brat -> cot -> antebrat -> mana
     const p = pivot(x, 1.5);
-    add(g.sleeve, mat(shirt), 0, -0.08, 0, p); add(g.arm, skin, 0, -0.36, 0, p); add(g.hand, skin, 0, -0.58, 0, p);
-    return p;
+    add(g.sleeve, mat(shirt), 0, -0.07, 0, p); add(g.upperArm, skin2, 0, -0.2, 0, p);
+    const elbow = pivot(0, -0.3, p);
+    add(g.foreArm, skin2, 0, -0.12, 0, elbow); add(g.hand, skin2, 0, -0.26, 0, elbow).scale.set(0.8, 1.25, 0.65);
+    return [p, elbow];
   };
-  const [legL, kneeL] = leg(-0.11), [legR, kneeR] = leg(0.11), armL = arm(-0.27), armR = arm(0.27);
+  const [legL, kneeL] = leg(-0.1), [legR, kneeR] = leg(0.1), [armL, elbowL] = arm(-0.235), [armR, elbowR] = arm(0.235);
 
   body.traverse((o) => { if (o.isMesh && o !== back) o.castShadow = true; });
   const sh = new THREE.Mesh(g.shadow, g.shadowMat); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.02; group.add(sh);
   group.scale.setScalar(1.12);
   scene.add(group);
-  return { group, body, legL, legR, kneeL, kneeR, armL, armR, blob: sh };
+  return { group, body, legL, legR, kneeL, kneeR, armL, armR, elbowL, elbowR, blob: sh };
 }
 
 // ---------- eticheta cu nume + inel sub jucatorul controlat ----------
