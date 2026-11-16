@@ -16,10 +16,11 @@
   <p>Sau scrie în Chrome pe telefon: <span class="addr" id="addr"></span></p>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
-    // adresa laptopului in Wi-Fi vine din linkul paginii (?ip=...), pusa de Claude
-    const ip = new URLSearchParams(location.search).get('ip') || location.hostname;
-    const url = 'http://' + ip + ':8123';
-    document.getElementById('addr').textContent = ip + ':8123';
+    // implicit: jocul de pe internet (GitHub Pages, merge ca aplicatie PWA);
+    // cu ?ip=... arata adresa laptopului din Wi-Fi-ul de acasa
+    const ip = new URLSearchParams(location.search).get('ip');
+    const url = ip ? 'http://' + ip + ':8123' : 'https://paulduna.github.io/joc-fotbal/';
+    document.getElementById('addr').textContent = url.replace(/^https?:\/\//, '');
     new QRCode(document.getElementById('qr'), { text: url, width: 300, height: 300 });
   </script>
 </body></html>
