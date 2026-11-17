@@ -88,6 +88,7 @@ const conf = new THREE.Points(confGeo, new THREE.PointsMaterial({ size: 0.38, ve
 conf.visible = false; conf.frustumCulled = false; scene.add(conf);
 let confT = 0;
 function confetti(x, z) {
+  if (net.role === 'host') netEv.push(['c', x, z]);
   confT = 4.5; conf.visible = true;
   const c = new THREE.Color();
   for (let i = 0; i < CONF_N; i++) {
@@ -126,17 +127,19 @@ const MARKERS = [makeMarker(scene, '#ffd84a'), makeMarker(scene, '#4ae3ff')];
 MARKERS.forEach((m) => m.setVisible(false));
 
 // ---------- tastatura ----------
-const keys = new Set(), pressed = new Set(), released = new Set();
+// comenzile: cele locale (tastatura / ecran) si, la jocul online, cele venite de pe celalalt telefon
+let keys = new Set(), pressed = new Set(), released = new Set();
 window.addEventListener('keydown', (e) => {
+  if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter' || e.code === 'NumpadEnter') netJoin(e.target.value.trim()); return; }   // scrii codul jocului online
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
-  if (!keys.has(e.code)) pressed.add(e.code);
-  keys.add(e.code);
+  if (!LOCAL.keys.has(e.code)) LOCAL.pressed.add(e.code);
+  LOCAL.keys.add(e.code);
   initAudio();
   if (game.state === 'menu') { if (e.code === 'Digit1') startMatch(1); if (e.code === 'Digit2') startMatch(2); }
   else if (game.state === 'end' && e.code === 'Enter') toMenu();
 });
-window.addEventListener('keyup', (e) => { keys.delete(e.code); released.add(e.code); });
-window.addEventListener('blur', () => keys.clear());
+window.addEventListener('keyup', (e) => { LOCAL.keys.delete(e.code); LOCAL.released.add(e.code); });
+window.addEventListener('blur', () => LOCAL.keys.clear());
 // pe telefon jocul porneste pe tot ecranul (fara barele browserului jos/sus)
 function goFullscreen() {
   if (!matchMedia('(pointer: coarse)').matches || document.fullscreenElement) return;
@@ -148,7 +151,11 @@ document.querySelectorAll('.opt[data-mode]').forEach((el) => el.addEventListener
 // ---------- comenzi tactile (telefon / tableta) ----------
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || new URLSearchParams(location.search).has('touch');
 const CZ = isTouch ? 0.8 : 1;                          // pe telefon camera sta mai aproape
-const stick = { id: null, ox: 0, oy: 0, x: 0, z: 0, mag: 0 };
+let stick = { id: null, ox: 0, oy: 0, x: 0, z: 0, mag: 0 };
+const LOCAL = { keys, pressed, released, stick };
+const REMOTE = { keys: new Set(), pressed: new Set(), released: new Set(), stick: { x: 0, z: 0, mag: 0 } };
+function useInput(inp) { keys = inp.keys; pressed = inp.pressed; released = inp.released; stick = inp.stick; }
+const inputOf = (h) => (h && h.remote ? REMOTE : LOCAL);
 let endAt = 0;
 if (isTouch) {
   document.body.classList.add('touch');
@@ -171,11 +178,11 @@ if (isTouch) {
   zone.addEventListener('pointerup', up); zone.addEventListener('pointercancel', up);
   const button = (id, code) => {
     const el = $(id);
-    const off = (e) => { e.preventDefault(); if (keys.has(code)) { keys.delete(code); released.add(code); } el.classList.remove('on'); };
+    const off = (e) => { e.preventDefault(); if (LOCAL.keys.has(code)) { LOCAL.keys.delete(code); LOCAL.released.add(code); } el.classList.remove('on'); };
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault(); initAudio();
       try { el.setPointerCapture(e.pointerId); } catch (_) {}
-      if (!keys.has(code)) pressed.add(code); keys.add(code); el.classList.add('on');
+      if (!LOCAL.keys.has(code)) LOCAL.pressed.add(code); LOCAL.keys.add(code); el.classList.add('on');
     });
     el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off);
   };
@@ -318,7 +325,7 @@ window.addEventListener('keydown', (e) => {
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden && game.state !== 'menu') setPaused(true); });
 let toastT = 0;
-function toast(text, secs = 1.6) { const t = $('toast'); t.textContent = text; t.classList.toggle('on', !!text); toastT = secs; }
+function toast(text, secs = 1.6) { if (net.role === 'host') netEv.push(['t', text, secs]); const t = $('toast'); t.textContent = text; t.classList.toggle('on', !!text); toastT = secs; }
 const anyDown = (list) => list.some((k) => keys.has(k));
 const anyPressed = (list) => list.some((k) => pressed.has(k));
 const anyReleased = (list) => list.some((k) => released.has(k));
@@ -326,7 +333,7 @@ const anyReleased = (list) => list.some((k) => released.has(k));
 // ---------- HUD ----------
 $('t0').textContent = TEAMS[0].name; $('t1').textContent = TEAMS[1].name;
 const log = [];
-function showMsg(text, secs = 2) { $('msg').classList.toggle('long', text.length > 60); log.push(Math.round(game.time) + 's ' + text.replace(/\n/g, ' ')); const m = $('msg'); m.textContent = text; m.classList.add('on'); game.msgT = secs; }
+function showMsg(text, secs = 2) { if (net.role === 'host') netEv.push(['m', text, secs]); $('msg').classList.toggle('long', text.length > 60); log.push(Math.round(game.time) + 's ' + text.replace(/\n/g, ' ')); const m = $('msg'); m.textContent = text; m.classList.add('on'); game.msgT = secs; }
 let lastClock = '';
 function updateHud() {
   const len = periodMin(), base = [0, 45, 90, 105][game.half - 1] || 0, add = game.added || 0;
@@ -369,12 +376,16 @@ function updateScore() {
 }
 
 // ---------- flux meci ----------
-function startMatch(mode) {
+function startMatch(mode, online) {
   game.mode = mode; game.half = 1; game.time = 0; game.score = [0, 0]; game.next = null; game.pens = null; newPeriod(); updateScore();
   humans.length = 0;
-  for (let i = 0; i < mode; i++) { const tm = mode === 1 ? myTeam : i; humans.push({ team: tm, keys: KEYMAPS[i], ctrl: squad[tm][9], charge: 0, charging: false, marker: MARKERS[i], tgt: TGT[i], passTo: null, swT: 0 }); }
+  for (let i = 0; i < mode; i++) {
+    // online: eu (telefonul care a creat jocul) + prietenul, care trimite comenzile prin internet
+    const tm = mode === 1 || online ? (i === 0 ? myTeam : 1 - myTeam) : i;
+    humans.push({ team: tm, keys: online ? KEYMAPS[0] : KEYMAPS[i], remote: !!online && i === 1, ctrl: squad[tm][9], charge: 0, charging: false, marker: MARKERS[i], tgt: TGT[i], passTo: null, swT: 0 });
+  }
   MARKERS.forEach((m, i) => m.setVisible(i < mode));
-  $('p1').classList.toggle('hidden', mode < 1); $('p2').classList.toggle('hidden', mode < 2);
+  $('p1').classList.toggle('hidden', mode < 1); $('p2').classList.toggle('hidden', mode < 2 || !!online);
   $('menu').classList.add('hidden'); $('touch').classList.toggle('hidden', !isTouch); $('pauseBtn').classList.remove('hidden'); $('teamBtn').classList.remove('hidden');
   players.length = 0; players.push(...allPlayers);
   resetSquads();
@@ -383,7 +394,7 @@ function startMatch(mode) {
   game.state = 'play';
   kickoff(0);
 }
-function toMenu() { game.state = 'menu'; $('touch').classList.add('hidden'); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden'); $('teamPanel').classList.add('hidden'); TGT.forEach((m) => { m.visible = false; }); toast('', 0); $('menu').classList.remove('hidden'); $('msg').classList.remove('on'); }
+function toMenu() { netClose(); game.state = 'menu'; $('touch').classList.add('hidden'); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden'); $('teamPanel').classList.add('hidden'); TGT.forEach((m) => { m.visible = false; }); toast('', 0); $('menu').classList.remove('hidden'); $('msg').classList.remove('on'); }
 
 function setOwner(p) {
   const off = ball.offside === p; ball.offside = null;
@@ -436,7 +447,7 @@ function setFreeKick(taker, direct) {
     wall.forEach((q, i) => { const o = (i - (n - 1) / 2) * 0.62; q.x = cx - uz * o; q.z = cz + ux * o; q.vx = q.vz = 0; q.fx = -ux; q.fz = -uz; });
   }
   const hum = humans.find((h) => h.team === taker.team);
-  if (hum && direct && d < 32 && d > 13) openFkPick(taker);   // lovitura libera directa: alegi cine bate, apoi tintesti cu efect
+  if (hum && !hum.remote && direct && d < 32 && d > 13) openFkPick(taker);   // lovitura libera directa: alegi cine bate, apoi tintesti cu efect
   else if (hum) toast('Lovitură liberă: țintește, apoi PASĂ sau ȘUT', 3.5);
 }
 
@@ -493,7 +504,7 @@ function fkAimStep(h, dt) {
   p.human = h;
   if (a.phase === 'aim') {
     let ix = (keys.has(K.right) ? 1 : 0) - (keys.has(K.left) ? 1 : 0), iz = (keys.has(K.down) ? 1 : 0) - (keys.has(K.up) ? 1 : 0);
-    if (h === humans[0] && stick.mag > 0.2) { ix = stick.x * stick.mag; iz = stick.z * stick.mag; }
+    if ((h === humans[0] || h.remote) && stick.mag > 0.2) { ix = stick.x * stick.mag; iz = stick.z * stick.mag; }
     a.aimZ = clamp(a.aimZ + iz * 3.2 * dt, -6, 6);
     a.curve = clamp(a.curve + ix * 0.5 * dt * (a.gx > 0 ? 1 : -1), -0.55, 0.55);
     if (anyPressed(K.shoot)) h.charging = true;
@@ -911,14 +922,14 @@ function updateHuman(h, dt) {
   const p = h.ctrl; p.human = h; h.passTo = null;
   let ix = (keys.has(K.right) ? 1 : 0) - (keys.has(K.left) ? 1 : 0), iz = (keys.has(K.down) ? 1 : 0) - (keys.has(K.up) ? 1 : 0);
   let sprint = keys.has(K.sprint);
-  if (h === humans[0] && stick.mag > 0.2) { ix = stick.x; iz = stick.z; }
+  if ((h === humans[0] || h.remote) && stick.mag > 0.2) { ix = stick.x; iz = stick.z; }
   const il = Math.hypot(ix, iz); if (il) { ix /= il; iz /= il; }
   const owns = ball.owner === p;
   if (p.stunT > 0 || p.lungeT > 0) { h.charging = false; h.charge = 0; return; }
 
   h.tapT = (h.tapT || 0) - dt;
   if (owns) {
-    const trickKey = h === humans[0] ? 'KeyE' : 'KeyU';      // butonul TRUC (tasta E / U) sau SPRINT de 2 ori = braziliana
+    const trickKey = h === humans[0] || h.remote ? 'KeyE' : 'KeyU';      // butonul TRUC (tasta E / U) sau SPRINT de 2 ori = braziliana
     if (pressed.has(trickKey) && ball.throwIn !== p && ball.freeKick !== p) { if (il) face(p, ix, iz); rainbow(p); h.charging = false; h.charge = 0; return; }
     if (pressed.has(K.sprint) && ball.throwIn !== p && ball.freeKick !== p) {
       if (h.tapT > 0) { h.tapT = 0; if (il) face(p, ix, iz); rainbow(p); h.charging = false; h.charge = 0; return; }
@@ -1085,7 +1096,9 @@ function step(dt) {
   if (game.fkAim && fk !== game.fkAim.taker) { game.fkAim = null; fkDots.visible = false; }
   for (const h of humans) {
     if (fk && h.team !== fk.team) continue;
+    useInput(inputOf(h));
     if (game.fkAim && h.team === game.fkAim.taker.team) fkAimStep(h, dt); else updateHuman(h, dt);
+    useInput(LOCAL);
   }
   for (const p of players) {
     if (p.lungeT > 0) {                                // alunecare / deposedare
@@ -1172,9 +1185,9 @@ function nextPenalty() {
   sfx.whistle();
 }
 function soInput(h) {                                    // -1 sus, 1 jos, 0 la mijloc
-  const K = h.keys;
-  let iz = (keys.has(K.down) ? 1 : 0) - (keys.has(K.up) ? 1 : 0);
-  if (h === humans[0] && stick.mag > 0.3) iz = Math.abs(stick.z) > 0.35 ? Math.sign(stick.z) : 0;
+  const K = h.keys, I = inputOf(h);
+  let iz = (I.keys.has(K.down) ? 1 : 0) - (I.keys.has(K.up) ? 1 : 0);
+  if ((h === humans[0] || h.remote) && I.stick.mag > 0.3) iz = Math.abs(I.stick.z) > 0.35 ? Math.sign(I.stick.z) : 0;
   return iz;
 }
 function soDecided() {
@@ -1208,11 +1221,13 @@ function shootoutStep(dt) {
       p.human = h; const iz = soInput(h);
       SO.aim += (iz * 3.3 - SO.aim) * Math.min(1, 6 * dt);
       p.fz = SO.aim / 11; p.fx = 1;
+      useInput(inputOf(h));
       if (anyPressed(h.keys.shoot)) h.charging = true;
       if (h.charging) {
         if (anyDown(h.keys.shoot)) h.charge = Math.min(1, h.charge + dt / 0.9);
         if (anyReleased(h.keys.shoot) || !anyDown(h.keys.shoot) || h.charge >= 1) { power = Math.max(0.2, h.charge); h.charging = false; h.charge = 0; }
       }
+      useInput(LOCAL);
     } else if (SO.t > 2.2) {
       power = 0.45 + Math.random() * 0.35;
       SO.aim = Math.random() < 0.15 ? rnd(0.6) : (Math.random() < 0.5 ? -1 : 1) * (1.6 + Math.random() * 1.6);
@@ -1381,6 +1396,169 @@ function syncGfx(dt) {
   world.sun.position.set(cam.x - 40, 80, 50); world.sun.target.position.set(cam.x, 0, 0);
 }
 
+// ---------- joc online pe doua telefoane ----------
+// Telefonul care creeaza jocul ("gazda") ruleaza meciul. Prietenul ("client") trimite doar comenzile lui
+// si primeste de 20 de ori pe secunda pozitiile tuturor. Legatura e directa intre telefoane (WebRTC, prin PeerJS);
+// serverul gratuit PeerJS ajuta doar la gasirea celuilalt telefon dupa cod.
+const net = { role: null, peer: null, conn: null, frame: 0, pend: { p: [], r: [] }, snap: null, team: 1, names: null };
+const netEv = [];
+for (const k of Object.keys(sfx)) { const orig = sfx[k]; sfx[k] = (...a) => { orig(...a); if (net.role === 'host') netEv.push(['s', k, a]); }; }
+const r2 = (v) => Math.round((v || 0) * 100) / 100;
+function setNetStatus(t) { $('netStatus').textContent = t; }
+function loadPeer() {
+  if (window.Peer) return Promise.resolve();
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'; s.onload = res; s.onerror = rej; document.head.append(s); });
+}
+function netClose() {
+  const c = net.conn, pr = net.peer;
+  net.role = null; net.conn = null; net.peer = null; net.snap = null; net.names = null;
+  REMOTE.keys.clear(); REMOTE.pressed.clear(); REMOTE.released.clear(); REMOTE.stick.mag = 0;
+  try { c && c.close(); } catch (_) {}
+  try { pr && pr.destroy(); } catch (_) {}
+}
+function netLost() {
+  if (!net.role && !net.peer) return;
+  const wasGame = game.state !== 'menu';
+  netClose();
+  if (wasGame) { toMenu(); toast('Legătura cu celălalt telefon s-a pierdut', 4); }
+  else setNetStatus('Legătura s-a pierdut. Încearcă din nou.');
+}
+function showNetPanel(v) {
+  $('netPanel').classList.toggle('hidden', !v);
+  if (v) { $('netChoose').classList.remove('hidden'); $('netCodeBox').classList.add('hidden'); $('netJoinBox').classList.add('hidden'); setNetStatus('Unul dintre voi creează jocul, celălalt intră cu codul. Fiți pe internet amândoi.'); }
+}
+async function netHost(forced) {
+  $('netChoose').classList.add('hidden'); setNetStatus('Se pregătește jocul...');
+  try { await loadPeer(); } catch (_) { return setNetStatus('Nu am putut porni jocul online. Verifică internetul.'); }
+  const code = forced || String(1000 + Math.floor(Math.random() * 9000));
+  const peer = new Peer('fotbal3d-' + code); net.peer = peer;
+  peer.on('open', () => { $('netCode').textContent = code; $('netCodeBox').classList.remove('hidden'); setNetStatus('Spune-i prietenului codul de mai jos. Așteptăm să intre...'); });
+  peer.on('error', (e) => { if (e.type === 'unavailable-id') { peer.destroy(); net.peer = null; netHost(); } else setNetStatus('Eroare: ' + e.type + '. Încearcă din nou.'); });
+  peer.on('connection', (conn) => {
+    if (net.conn) { conn.close(); return; }
+    net.conn = conn;
+    conn.on('open', () => {
+      net.role = 'host'; net.frame = 0;
+      conn.send({ t: 'start', team: 1 - myTeam });
+      showNetPanel(false); goFullscreen(); startMatch(2, true);
+      toast('Prietenul a intrat! Tu ești ' + TEAMS[myTeam].name, 3);
+    });
+    conn.on('data', (m) => {
+      if (!m || m.t !== 'i') return;
+      REMOTE.keys = new Set(m.k);
+      for (const c of m.p) REMOTE.pressed.add(c);
+      for (const c of m.r) REMOTE.released.add(c);
+      REMOTE.stick.x = m.s[0]; REMOTE.stick.z = m.s[1]; REMOTE.stick.mag = m.s[2];
+    });
+    conn.on('close', netLost); conn.on('error', netLost);
+  });
+}
+async function netJoin(code) {
+  if (!/^\d{4}$/.test(code)) return setNetStatus('Codul are 4 cifre.');
+  setNetStatus('Caut jocul ' + code + '...');
+  try { await loadPeer(); } catch (_) { return setNetStatus('Nu am putut porni jocul online. Verifică internetul.'); }
+  const peer = new Peer(); net.peer = peer;
+  peer.on('open', () => {
+    const conn = peer.connect('fotbal3d-' + code, { reliable: true }); net.conn = conn;
+    conn.on('open', () => setNetStatus('Conectat! Pornește meciul...'));
+    conn.on('data', onClientData);
+    conn.on('close', netLost); conn.on('error', netLost);
+  });
+  peer.on('error', (e) => setNetStatus(e.type === 'peer-unavailable' ? 'Nu există joc cu codul ' + code + '. Verifică codul.' : 'Eroare: ' + e.type + '. Încearcă din nou.'));
+}
+function onClientData(m) {
+  if (!m) return;
+  if (m.t === 'start') {                                 // incepe meciul la prieten
+    net.role = 'client'; net.team = m.team; net.frame = 0;
+    showNetPanel(false); goFullscreen();
+    game.mode = 2; game.score = [0, 0]; game.pens = null; game.half = 1; game.time = 0; updateScore();
+    players.length = 0; players.push(...allPlayers);
+    allPlayers.forEach((p) => { p.group.visible = true; });
+    resetSquads();
+    humans.length = 0;
+    [net.team, 1 - net.team].forEach((t, i) => humans.push({ team: t, keys: KEYMAPS[0], ctrl: squad[t][9], charge: 0, charging: false, marker: MARKERS[i], tgt: TGT[i], passTo: null, swT: 0 }));
+    MARKERS.forEach((mk) => mk.setVisible(true));
+    $('p1').classList.remove('hidden'); $('p2').classList.add('hidden');
+    $('menu').classList.add('hidden'); $('touch').classList.toggle('hidden', !isTouch); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden');
+    game.state = 'play';
+    toast('Ai intrat! Tu ești ' + TEAMS[net.team].name, 3);
+    return;
+  }
+  if (m.t !== 's') return;
+  net.snap = m;
+  for (const ev of m.ev || []) {                         // mesaje, sunete, confetti de la gazda
+    if (ev[0] === 'm') showMsg(ev[1], ev[2]);
+    else if (ev[0] === 't') toast(ev[1], ev[2]);
+    else if (ev[0] === 's' && sfx[ev[1]]) sfx[ev[1]](...ev[2]);
+    else if (ev[0] === 'c') confetti(ev[1], ev[2]);
+  }
+  if (m.r && (!net.names || m.r.join() !== net.names.join())) {   // schimbari de jucatori facute la gazda
+    const all = TEAMS.flatMap((t) => t.players.concat(t.bench || []));
+    m.r.forEach((name, i) => { const p = allPlayers[i]; if (p.d.name !== name) { const d = all.find((x) => x.name === name); if (d) substitute(p, d); } });
+    net.names = m.r;
+  }
+  if (m.st === 'end' && game.state !== 'end') endAt = performance.now();
+}
+function netSendSnap() {
+  if (!net.conn || !net.conn.open || (net.frame++ % 3)) return;
+  const m = {
+    t: 's', b: [r2(ball.x), r2(ball.y), r2(ball.z)], o: ball.owner ? allPlayers.indexOf(ball.owner) : -1,
+    P: allPlayers.map((p) => [r2(p.x), r2(p.z), r2(p.fx), r2(p.fz), r2(p.vx), r2(p.vz), r2(p.kickT), r2(p.lungeT), r2(p.diveT), p.diveDir || 0, r2(p.jumpT), r2(p.trickT), r2(p.stunT), players.includes(p) ? 1 : 0, r2(p.stamina)]),
+    st: game.state, h: game.half, tm: r2(game.time), ad: game.added || 0, sc: game.score, pn: game.pens,
+    hc: humans.map((h) => allPlayers.indexOf(h.ctrl)), ch: humans.map((h) => r2(h.charge)), gs: game.scorer ? allPlayers.indexOf(game.scorer) : -1,
+    ev: netEv.splice(0),
+  };
+  if (net.frame % 60 < 3) m.r = allPlayers.map((p) => p.d.name);
+  try { net.conn.send(m); } catch (_) {}
+}
+function clientTick(dt) {
+  const m = net.snap;
+  if (m) {
+    const k = Math.min(1, 14 * dt), kb = Math.min(1, 22 * dt);
+    allPlayers.forEach((p, i) => {
+      const a = m.P[i]; if (!a) return;
+      const far = Math.hypot(a[0] - p.x, a[1] - p.z) > 5;            // dupa gol / fault jucatorii sunt mutati dintr-odata
+      p.x = far ? a[0] : p.x + (a[0] - p.x) * k; p.z = far ? a[1] : p.z + (a[1] - p.z) * k;
+      [p.fx, p.fz, p.vx, p.vz, p.kickT, p.lungeT, p.diveT, p.diveDir, p.jumpT, p.trickT, p.stunT] = a.slice(2, 13);
+      p.stamina = a[14];
+      const on = a[13] === 1, isOn = players.includes(p);
+      if (on !== isOn) { if (on) players.push(p); else players.splice(players.indexOf(p), 1); p.group.visible = on; }
+    });
+    const far = Math.hypot(m.b[0] - ball.x, m.b[2] - ball.z) > 6;
+    ball.x = far ? m.b[0] : ball.x + (m.b[0] - ball.x) * kb; ball.y = far ? m.b[1] : ball.y + (m.b[1] - ball.y) * kb; ball.z = far ? m.b[2] : ball.z + (m.b[2] - ball.z) * kb;
+    ball.owner = m.o >= 0 ? allPlayers[m.o] : null;
+    game.state = m.st; game.half = m.h; game.time = m.tm; game.added = m.ad;
+    if (game.score.join() !== m.sc.join() || JSON.stringify(game.pens) !== JSON.stringify(m.pn)) { game.score = m.sc; game.pens = m.pn; updateScore(); }
+    if (m.hc.length > 1) {                                // la gazda: [gazda, prieten]; aici: [eu, gazda]
+      humans[0].ctrl = allPlayers[m.hc[1]] || humans[0].ctrl; humans[1].ctrl = allPlayers[m.hc[0]] || humans[1].ctrl;
+      humans[0].charge = m.ch[1]; humans[1].charge = m.ch[0];
+    }
+    game.scorer = m.gs >= 0 ? allPlayers[m.gs] : null;
+  }
+  // trimitem comenzile mele (tastatura / joystick / butoane) catre gazda
+  net.pend.p.push(...LOCAL.pressed); net.pend.r.push(...LOCAL.released);
+  if (net.conn && net.conn.open && (net.frame++ % 2 === 0)) {
+    try { net.conn.send({ t: 'i', k: [...LOCAL.keys], p: net.pend.p, r: net.pend.r, s: [r2(LOCAL.stick.x), r2(LOCAL.stick.z), r2(LOCAL.stick.mag)] }); } catch (_) {}
+    net.pend = { p: [], r: [] };
+  }
+}
+$('netOpen').addEventListener('click', () => { initAudio(); showNetPanel(true); });
+{                                                       // test: ?nettest=host|join&code=NNNN (doua browsere)
+  const q = new URLSearchParams(location.search), nt = q.get('nettest');
+  if (nt) {
+    const pre = document.createElement('pre'); pre.id = 'simout'; document.body.append(pre); let sent = false;
+    setInterval(() => {
+      if (nt === 'join' && net.role === 'client' && !sent) { LOCAL.keys.add('KeyD'); sent = true; }
+      pre.textContent = JSON.stringify({ role: net.role, state: game.state, frame: net.frame, status: $('netStatus').textContent, remote: [...REMOTE.keys], snap: !!net.snap, ctrl: humans.map((h) => h.ctrl && h.ctrl.d.name), ball: [r2(ball.x), r2(ball.z)] });
+    }, 300);
+    showNetPanel(true); if (nt === 'host') netHost(q.get('code')); else netJoin(q.get('code'));
+  }
+}
+$('netHost').addEventListener('click', () => netHost());
+$('netJoin').addEventListener('click', () => { $('netChoose').classList.add('hidden'); $('netJoinBox').classList.remove('hidden'); setNetStatus('Scrie codul de 4 cifre de pe telefonul prietenului.'); $('netInput').focus(); });
+$('netGo').addEventListener('click', () => netJoin($('netInput').value.trim()));
+$('netBack').addEventListener('click', () => { netClose(); showNetPanel(false); });
+
 // ---------- bucla principala ----------
 const demo = new URLSearchParams(location.search).has('demo');
 const autoMode = +new URLSearchParams(location.search).get('mode');
@@ -1404,6 +1582,7 @@ function applySnap(a) {
 function tick(dt, now) {
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').classList.remove('on'); }
   if (game.msgT > 0) { game.msgT -= dt; if (game.msgT <= 0) $('msg').classList.remove('on'); }
+  if (net.role === 'client') { clientTick(dt); return endTick(dt); }   // online, la prieten: doar afisam ce trimite telefonul gazda
   if (game.state === 'play') {
     if (game.freeze > 0) game.freeze -= dt; else { step(dt); record(); }
   } else if (game.state === 'goal' || game.state === 'break') {
@@ -1430,7 +1609,8 @@ function tick(dt, now) {
   endTick(dt);
 }
 function endTick(dt) {
-  pressed.clear(); released.clear();
+  if (net.role === 'host') netSendSnap();
+  for (const inp of [LOCAL, REMOTE]) { inp.pressed.clear(); inp.released.clear(); }
   syncGfx(dt); updateHud(); updateTouchUi(); drawRadar();
 }
 
@@ -1446,7 +1626,7 @@ if (simN) {
 let last = performance.now(), perfT = 0, perfN = 0;
 function frame(now) {
   const dt = clamp((now - last) / 1000, 0, 0.033); last = now;
-  if (game.paused) { pressed.clear(); released.clear(); } else tick(dt, now);
+  if (game.paused) { for (const inp of [LOCAL, REMOTE]) { inp.pressed.clear(); inp.released.clear(); } } else tick(dt, now);
   if (perfN >= 0 && game.state === 'play' && !game.paused) {            // telefon lent -> imagine mai putin detaliata, dar fluida
     perfT += dt; perfN++;
     if (perfN === 120) {

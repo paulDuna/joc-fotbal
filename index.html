@@ -91,6 +91,12 @@
   /* ---- echipa si schimbari ---- */
   #teamBtn { position: fixed; top: 12px; right: calc(60px + env(safe-area-inset-right)); width: 40px; height: 40px; border-radius: 50%; background: rgba(12,18,28,.8); display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; }
   body.touch #teamBtn { top: 6px; right: calc(52px + env(safe-area-inset-right)); width: 36px; height: 36px; }
+  #netPanel { position: fixed; inset: 0; background: rgba(6,12,20,.94); z-index: 47; display: flex; align-items: center; justify-content: center; text-align: center; overflow-y: auto; touch-action: pan-y; }
+  #netPanel .box { padding: 16px 24px; max-width: 560px; } #netPanel h1 { margin: 0 0 8px; font-size: 34px; } #netStatus { font-size: 17px; opacity: .9; margin: 0 0 16px; }
+  #netCode { font-size: 64px; font-weight: 800; letter-spacing: 10px; color: #ffd84a; margin: 4px 0 16px; }
+  #netJoinBox { display: flex; gap: 12px; justify-content: center; align-items: center; margin-bottom: 16px; }
+  #netInput { font-size: 34px; width: 150px; text-align: center; letter-spacing: 8px; padding: 8px; border-radius: 10px; border: 2px solid #ffd84a; background: #111a26; color: #fff; user-select: text; -webkit-user-select: text; touch-action: manipulation; }
+  body.touch #netPanel h1 { font-size: 24px; } body.touch #netCode { font-size: 48px; margin-bottom: 8px; }
   #fkPanel { touch-action: pan-y; position: fixed; inset: 0; background: rgba(6,12,20,.9); z-index: 46; overflow-y: auto; padding: 12px calc(16px + env(safe-area-inset-right)) 16px calc(16px + env(safe-area-inset-left)); }
   #fkList { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
   .fk-best { border-color: #ffd84a !important; background: rgba(255,216,74,.2) !important; }
@@ -124,10 +130,11 @@
 <div id="menu">
   <div class="box">
     <h1>⚽ Fotbal 3D</h1>
-    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 22</b></p>
+    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 23</b></p>
     <div class="opts">
       <div class="opt" data-mode="1"><kbd class="keysOnly">1</kbd> <span class="keysOnly">Un jucător (contra calculatorului)</span><span class="touchOnly">▶ Joacă</span></div>
       <div class="opt keysOnly" data-mode="2"><kbd>2</kbd> Doi jucători</div>
+      <div class="opt" id="netOpen">🌐 Online (2 telefoane)</div>
     </div>
     <div class="difs">Echipa ta: <span class="myt" data-t="0">🔵 Albaștrii (Messi, Mbappé)</span><span class="myt" data-t="1">🔴 Roșiii (Ronaldo, Salah)</span></div>
     <div class="difs">Dificultate: <span class="dif" data-d="0">Ușor</span><span class="dif" data-d="1">Normal</span><span class="dif" data-d="2">Greu</span></div>
@@ -159,6 +166,14 @@
 <div id="pauseBtn" class="hidden">⏸</div>
 <div id="teamBtn" class="hidden">👕</div>
 <div id="pause" class="hidden"><div><h1>Pauză</h1><div class="opts"><div class="opt" id="resume">▶ Continuă</div><div class="opt" id="teamOpen">👕 Echipa</div><div class="opt" id="quit">Meniu</div></div></div></div>
+<div id="netPanel" class="hidden"><div class="box">
+  <h1>🌐 Joc online</h1>
+  <p id="netStatus"></p>
+  <div class="opts" id="netChoose"><div class="opt" id="netHost">➕ Creează joc</div><div class="opt" id="netJoin">🔑 Intră cu cod</div></div>
+  <div id="netCodeBox" class="hidden">Codul jocului:<div id="netCode"></div></div>
+  <div id="netJoinBox" class="hidden"><input id="netInput" type="tel" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="off"><div class="opt" id="netGo">Intră ▶</div></div>
+  <div class="opts"><div class="opt" id="netBack">Înapoi</div></div>
+</div></div>
 <div id="fkPanel" class="hidden">
   <div class="tp-head"><b>🎯 Lovitură liberă! Cine o bate?</b></div>
   <div id="tpHint">Apasă pe jucătorul care vrei să bată. ⭐ = cel mai bun la lovituri libere</div>
