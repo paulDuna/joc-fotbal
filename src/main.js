@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TEAMS, FORMATION } from './data.js';
-import { buildWorld, makeBall, makePlayerMesh, makeMarker, HALF_L, HALF_W, GOAL_W, GOAL_H, BALL_R } from './world.js';
+import { buildWorld, makeBall, makePlayerMesh, makeMarker, netHit, netDepthAt, HALF_L, HALF_W, GOAL_W, GOAL_H, BALL_R } from './world.js';
 import { initAudio, sfx } from './audio.js';
 import { loadMannequin, makeMannequin, animateMannequin } from './mannequin.js';
 
@@ -216,6 +216,7 @@ document.querySelectorAll('.myt').forEach((el) => el.addEventListener('click', (
 try { setMyTeam(+localStorage.getItem('fotbal_team')); } catch (_) { setMyTeam(0); }
 let camTV = true;
 const closeup = +new URLSearchParams(location.search).get('closeup') || 0;
+const camShot = new URLSearchParams(location.search).get('shot');
 function setCam(tv) {
   camTV = tv;
   document.querySelectorAll('.cam').forEach((el) => el.classList.toggle('sel', (el.dataset.c === 'tv') === tv));
@@ -223,6 +224,19 @@ function setCam(tv) {
 }
 document.querySelectorAll('.cam').forEach((el) => el.addEventListener('click', () => setCam(el.dataset.c === 'tv')));
 try { setCam(localStorage.getItem('fotbal_cam') !== 'larg'); } catch (_) { setCam(true); }
+// meci de zi sau de seara (cu nocturne)
+function setNight(on) {
+  world.setNight(on);
+  document.querySelectorAll('.tod').forEach((el) => el.classList.toggle('sel', (el.dataset.n === '1') === on));
+  try { localStorage.setItem('fotbal_night', on ? '1' : '0'); } catch (_) {}
+}
+document.querySelectorAll('.tod').forEach((el) => el.addEventListener('click', () => setNight(el.dataset.n === '1')));
+try { setNight(localStorage.getItem('fotbal_night') === '1' || new URLSearchParams(location.search).has('night')); } catch (_) { setNight(false); }
+// la gol: plasa se umfla, fumigene in tribuna din spatele portii (si la prieten, in jocul online)
+function goalFx(side, z, y, speed, color) {
+  netHit(side, z, y, speed / 22); world.flare(color, side);
+  if (net.role === 'host') netEv.push(['g', side, z, y, speed, color]);
+}
 window.addEventListener('keydown', (e) => { if (e.code === 'KeyC' && game.state !== 'menu') { setCam(!camTV); toast(camTV ? '📺 Cameră TV' : '🔭 Cameră largă'); } });
 function setPaused(v) {
   if (game.state === 'menu' || game.state === 'end') v = false;
@@ -609,6 +623,7 @@ function goal(team) {
   const sc = ball.lastPlayer;
   const who = sc ? (sc.team === team ? sc.d.name : 'autogol ' + sc.d.name) : '';
   showMsg('GOOOL!\n' + who, 3); sfx.goal();
+  goalFx(Math.sign(ball.x) || 1, ball.z, ball.y, Math.hypot(ball.vx, ball.vz), TEAMS[team].color);
   try { navigator.vibrate && navigator.vibrate(250); } catch (_) {}
   confetti(clamp(ball.x, -HALF_L + 4, HALF_L - 4), ball.z);
   game.state = 'goal'; game.timer = 4; game.kick = 1 - team;
@@ -1203,7 +1218,7 @@ function soDecided() {
 function soResult(scored, text) {
   SO.phase = 'result'; SO.t = 0;
   SO.kicks[SO.taker.team].push(scored);
-  if (scored) { game.pens[SO.taker.team]++; sfx.goal(); } else sfx.ooh();
+  if (scored) { game.pens[SO.taker.team]++; sfx.goal(); goalFx(1, ball.z, ball.y, Math.hypot(ball.vx, ball.vz), TEAMS[SO.taker.team].color); } else sfx.ooh();
   updateScore();
   const row = (t) => TEAMS[t].short + '  ' + SO.kicks[t].map((x) => (x ? '⚽' : '❌')).join(' ');
   showMsg(text + '\n' + row(0) + '\n' + row(1), 2.2);
@@ -1266,7 +1281,7 @@ function shootoutStep(dt) {
   }
   // rezultat: mingea se opreste in plasa, apoi urmeaza urmatorul
   updateBall(dt);
-  if (ball.x > HALF_L) { const kk = 1 - Math.min(1, 5 * dt); ball.vx *= kk; ball.vz *= kk; ball.x = Math.min(ball.x, HALF_L + 1.8); ball.z = clamp(ball.z, -GOAL_W + 0.2, GOAL_W - 0.2); ball.y = Math.min(ball.y, GOAL_H - 0.2); }
+  if (ball.x > HALF_L) { const kk = 1 - Math.min(1, 5 * dt); ball.vx *= kk; ball.vz *= kk; ball.y = Math.min(ball.y, GOAL_H - 0.2); ball.x = Math.min(ball.x, HALF_L + netDepthAt(ball.y) - 0.2); ball.z = clamp(ball.z, -GOAL_W + 0.2, GOAL_W - 0.2); }
   if (SO.t > 2.4) {
     const w = soDecided();
     if (w >= 0) { confetti(HALF_L - 10, 0); sfx.goal(); endMatch(); return; }
@@ -1286,8 +1301,8 @@ function idleStep(dt) {                                 // dupa gol / la pauza: 
   updateBall(dt);
   if (Math.abs(ball.x) > HALF_L) {
     const k = 1 - Math.min(1, 5 * dt); ball.vx *= k; ball.vz *= k;
-    ball.x = clamp(ball.x, -HALF_L - 1.8, HALF_L + 1.8); ball.z = clamp(ball.z, -GOAL_W + 0.2, GOAL_W - 0.2);
-    ball.y = Math.min(ball.y, GOAL_H - 0.2);
+    ball.y = Math.min(ball.y, GOAL_H - 0.2); ball.z = clamp(ball.z, -GOAL_W + 0.2, GOAL_W - 0.2);
+    const mx = HALF_L + netDepthAt(ball.y) - 0.2; ball.x = clamp(ball.x, -mx, mx);   // mingea ramane in plasa (poarta e mai putin adanca sus)
   }
 }
 
@@ -1377,8 +1392,7 @@ function syncGfx(dt) {
   trail.forEach((m, i) => { const h = hist[(i + 1) * 2]; m.visible = fast && !!h; if (m.visible) m.position.set(h[0], h[1] + 0.05, h[2]); });
   updateConfetti(dt);
   if (offT > 0) { offT -= dt; offMesh.material.opacity = Math.min(0.9, offT); if (offT <= 0) offMesh.visible = false; }
-  const bounce = game.state === 'goal' ? Math.abs(Math.sin(performance.now() / 110)) * 0.012 : 0;      // publicul sare la gol
-  for (const t of world.crowdTex) t.offset.y = bounce;
+  world.update(dt, performance.now() / 1000, game.state === 'goal');      // public, steaguri, fumigene, plasa portii
   for (const t of world.ledTex) t.offset.x = (t.offset.x + dt * 0.03) % 1;   // reclamele de pe panouri curg
   const k = Math.min(1, (camTV ? 5 : 3.5) * dt), celeb = game.state === 'goal' && game.scorer;
   const so = game.state === 'shootout' || (game.state === 'end' && game.pens);
@@ -1392,7 +1406,8 @@ function syncGfx(dt) {
   const [ch, cd] = camTV ? [13, 27] : [25, 45];          // TV: ca la televizor, mai jos si mai aproape
   camera.position.set(cam.x, ch * CZ * cam.zoom, cam.lz + (cd * CZ - cam.z * 0.15) * cam.zoom);
   camera.lookAt(cam.x, celeb ? 1 : 0, cam.lz);
-  if (closeup) { const q = squad[0][closeup]; camera.position.set(q.x + q.fx * 2.6 + 0.6, 1.9, q.z + q.fz * 2.6 + 0.6); camera.lookAt(q.x, 1.4, q.z); }   // test: vezi un jucator de aproape
+  if (camShot === 'goal') { camera.position.set(HALF_L - 9, 3.2, 7); camera.lookAt(HALF_L, 1.1, 0); }   // test: poza cu poarta
+  else if (closeup) { const q = squad[0][closeup]; camera.position.set(q.x + q.fx * 2.6 + 0.6, 1.9, q.z + q.fz * 2.6 + 0.6); camera.lookAt(q.x, 1.4, q.z); }   // test: vezi un jucator de aproape
   world.sun.position.set(cam.x - 40, 80, 50); world.sun.target.position.set(cam.x, 0, 0);
 }
 
@@ -1491,6 +1506,7 @@ function onClientData(m) {
     else if (ev[0] === 't') toast(ev[1], ev[2]);
     else if (ev[0] === 's' && sfx[ev[1]]) sfx[ev[1]](...ev[2]);
     else if (ev[0] === 'c') confetti(ev[1], ev[2]);
+    else if (ev[0] === 'g') goalFx(...ev.slice(1));
   }
   if (m.r && (!net.names || m.r.join() !== net.names.join())) {   // schimbari de jucatori facute la gazda
     const all = TEAMS.flatMap((t) => t.players.concat(t.bench || []));

@@ -84,40 +84,84 @@ function netTexture() {
   return t;
 }
 
-function buildGoal(scene, side, netTex) {
-  const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
-  const x = side * HALF_L, depth = 2;
-  const post = new THREE.CylinderGeometry(0.07, 0.07, GOAL_H, 10);
+// poarta ca pe stadioanele mari: stalpi rotunzi albi, cadru in spate (sus 0.8 m adancime, jos 2 m)
+// si plasa din ochiuri (linii) care se umfla cand intra mingea
+export const NET_TOP = 0.8, NET_BOT = 2.0;
+export const netDepthAt = (y) => NET_TOP + (NET_BOT - NET_TOP) * Math.max(0, 1 - y / GOAL_H);   // cat de adanca e poarta la inaltimea y
+const goals = [];
+function buildGoal(scene, side) {
+  const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.1 });
+  const frame = new THREE.MeshStandardMaterial({ color: 0xd8dde3, roughness: 0.5 });
+  const x = side * HALF_L, R = 0.06;
+  const post = new THREE.CylinderGeometry(R, R, GOAL_H + R, 18);
   for (const z of [-GOAL_W, GOAL_W]) {
-    const m = new THREE.Mesh(post, white); m.position.set(x, GOAL_H / 2, z); m.castShadow = true; scene.add(m);
+    const m = new THREE.Mesh(post, white); m.position.set(x, (GOAL_H + R) / 2, z); m.castShadow = true; scene.add(m);
   }
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, GOAL_W * 2 + 0.14, 10), white);
-  bar.rotation.x = Math.PI / 2; bar.position.set(x, GOAL_H, 0); scene.add(bar);
-  const net = (w, h, rx, ry, px, py, pz) => {
-    const tex = netTex.clone(); tex.needsUpdate = true; tex.repeat.set(w / 0.25, h / 0.25);
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
-    m.rotation.set(rx, ry, 0); m.position.set(px, py, pz); scene.add(m);
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(R, R, GOAL_W * 2 + R * 2, 18), white);
+  bar.rotation.x = Math.PI / 2; bar.position.set(x, GOAL_H, 0); bar.castShadow = true; scene.add(bar);
+  // cadrul din spate: bare subtiri care tin plasa
+  const rod = (a, b, r = 0.025) => {
+    const d = new THREE.Vector3().subVectors(b, a), m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d.length(), 8), frame);
+    m.position.copy(a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); scene.add(m);
   };
-  net(GOAL_W * 2, GOAL_H, 0, Math.PI / 2, x + side * depth, GOAL_H / 2, 0);        // spate
-  net(depth, GOAL_H, 0, 0, x + side * depth / 2, GOAL_H / 2, -GOAL_W);             // lateral
-  net(depth, GOAL_H, 0, 0, x + side * depth / 2, GOAL_H / 2, GOAL_W);              // lateral
-  net(depth, GOAL_W * 2, Math.PI / 2, 0, x + side * depth / 2, GOAL_H, 0);         // sus
+  const P = (dx, y, z) => new THREE.Vector3(x + side * dx, y, z);
+  for (const z of [-GOAL_W, GOAL_W]) { rod(P(0, GOAL_H, z), P(NET_TOP, GOAL_H, z)); rod(P(NET_TOP, GOAL_H, z), P(NET_BOT, 0.02, z)); rod(P(0, 0.02, z), P(NET_BOT, 0.02, z)); }
+  rod(P(NET_TOP, GOAL_H, -GOAL_W), P(NET_TOP, GOAL_H, GOAL_W)); rod(P(NET_BOT, 0.02, -GOAL_W), P(NET_BOT, 0.02, GOAL_W), 0.03);
+  // plasa: retea de linii pe acoperis, spate si laterale (ochiuri de ~12 cm)
+  const S = 0.12, pts = [], add = (a, b) => { pts.push(a.x, a.y, a.z, b.x, b.y, b.z); };
+  const back = (u, v) => P(NET_TOP + (NET_BOT - NET_TOP) * v, GOAL_H * (1 - v), u);                    // u = z, v = 0 sus .. 1 jos
+  const nu = Math.round(GOAL_W * 2 / S), nb = Math.round(Math.hypot(GOAL_H, NET_BOT - NET_TOP) / S), nr = Math.round(NET_TOP / S);
+  for (let i = 0; i <= nu; i++) { const z = -GOAL_W + i * GOAL_W * 2 / nu; add(back(z, 0), back(z, 1)); add(P(0, GOAL_H, z), P(NET_TOP, GOAL_H, z)); }
+  for (let j = 0; j <= nb; j++) add(back(-GOAL_W, j / nb), back(GOAL_W, j / nb));
+  for (let j = 0; j <= nr; j++) add(P(j * NET_TOP / nr, GOAL_H, -GOAL_W), P(j * NET_TOP / nr, GOAL_H, GOAL_W));
+  for (const z of [-GOAL_W, GOAL_W]) {                     // laterale: trapez
+    const ny = Math.round(GOAL_H / S), nx = Math.round(NET_BOT / S);
+    for (let j = 0; j <= ny; j++) { const y = j * GOAL_H / ny; add(P(0, y, z), P(netDepthAt(y), y, z)); }
+    for (let i = 0; i <= nx; i++) { const dx = i * NET_BOT / nx, ytop = dx <= NET_TOP ? GOAL_H : GOAL_H * (1 - (dx - NET_TOP) / (NET_BOT - NET_TOP)); add(P(dx, 0, z), P(dx, ytop, z)); }
+  }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  const net = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }));
+  scene.add(net);
+  goals.push({ side, x, net, base: Float32Array.from(pts), hit: null });
+}
+// mingea intra in plasa: ochiurile din jurul ei sunt impinse in spate, apoi plasa vibreaza si revine
+export function netHit(side, z, y, power = 1) { const g = goals.find((q) => q.side === side); if (g) g.hit = { z, y, t: 0, a: 0.55 * Math.min(1.4, power) }; }
+function updateNets(dt) {
+  for (const g of goals) {
+    if (!g.hit) continue;
+    const h = g.hit; h.t += dt;
+    const pos = g.net.geometry.attributes.position, arr = pos.array, b = g.base;
+    const amp = h.a * Math.exp(-h.t * 2.2) * Math.cos(h.t * 11);
+    for (let i = 0; i < arr.length; i += 3) {
+      const dz = b[i + 2] - h.z, dy = b[i + 1] - h.y, w = Math.exp(-(dz * dz + dy * dy) / 1.1);
+      const inside = Math.abs(b[i] - g.x) > 0.05 ? 1 : 0;        // stalpii raman pe loc
+      arr[i] = b[i] + g.side * amp * w * inside;
+    }
+    pos.needsUpdate = true;
+    if (h.t > 2.5) { arr.set(b); pos.needsUpdate = true; g.hit = null; }
+  }
 }
 
 export function buildWorld(scene, renderer, shadowSize = 2048) {
-  scene.background = canvasTex(8, 256, (g) => {           // cer in degrade
+  const daySky = canvasTex(8, 256, (g) => {               // cer in degrade
     const gr = g.createLinearGradient(0, 0, 0, 256);
     gr.addColorStop(0, '#2f6fc4'); gr.addColorStop(0.55, '#8ec3ee'); gr.addColorStop(1, '#dff0fb');
     g.fillStyle = gr; g.fillRect(0, 0, 8, 256);
   });
+  const nightSky = canvasTex(256, 256, (g) => {           // cer de noapte, cu stele si lumina stadionului jos
+    const gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, '#02040a'); gr.addColorStop(0.6, '#0a1430'); gr.addColorStop(1, '#2a3550');
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 160; i++) { g.fillStyle = `rgba(255,255,255,${0.3 + Math.random() * 0.6})`; g.fillRect(Math.random() * 256, Math.random() * 150, 1, 1); }
+  });
+  scene.background = daySky;
   scene.fog = new THREE.Fog(0xcfe6f7, 150, 340);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x4a7a3a, 1.15));
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x4a7a3a, 1.15); scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff2d8, 2.3); sun.position.set(-40, 80, 50); scene.add(sun); scene.add(sun.target);
   sun.castShadow = true; sun.shadow.mapSize.set(shadowSize, shadowSize);
   Object.assign(sun.shadow.camera, { left: -52, right: 52, top: 46, bottom: -46, near: 10, far: 220 });
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
-  const crowdTex = [];
+  const crowdTex = [], crowdMats = [];
 
   const outer = new THREE.Mesh(new THREE.PlaneGeometry(260, 200), new THREE.MeshStandardMaterial({ color: 0x2f7429, roughness: 1 }));
   outer.rotation.x = -Math.PI / 2; outer.position.y = -0.02; outer.receiveShadow = true; scene.add(outer);
@@ -134,8 +178,7 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
   const pitch = new THREE.Mesh(new THREE.PlaneGeometry(105, 68), new THREE.MeshStandardMaterial({ map: pt, bumpMap: det, bumpScale: 0.8, roughness: 0.92 }));
   pitch.rotation.x = -Math.PI / 2; pitch.receiveShadow = true; scene.add(pitch);
 
-  const netTex = netTexture();
-  buildGoal(scene, -1, netTex); buildGoal(scene, 1, netTex);
+  buildGoal(scene, -1); buildGoal(scene, 1);
 
   // tribune (fara cea dinspre camera)
   const crowd = crowdTexture();
@@ -143,14 +186,14 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
     const tex = crowd.clone(); tex.needsUpdate = true; tex.repeat.set(len / 30, 1.4); crowdTex.push(tex);
     const grp = new THREE.Group(); grp.rotation.y = ry; grp.position.set(px, 0, pz);
     const H = 24;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, H), new THREE.MeshBasicMaterial({ map: tex }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, H), new THREE.MeshBasicMaterial({ map: tex })); crowdMats.push(m.material);
     m.rotation.x = -0.75; m.position.y = 1.5 + (H / 2) * Math.cos(0.75); m.position.z = -(H / 2) * Math.sin(0.75);
     grp.add(m);
     // inelul de sus al tribunei, cu un brau intunecat intre ele
     const band = new THREE.Mesh(new THREE.BoxGeometry(len, 2.4, 1), new THREE.MeshStandardMaterial({ color: 0x1b1f27 }));
     band.position.set(0, 20.2, -16.9); grp.add(band);
     const tex2 = crowd.clone(); tex2.needsUpdate = true; tex2.repeat.set(len / 30, 0.8); tex2.offset.x = 0.37; crowdTex.push(tex2);
-    const H2 = 14, up = new THREE.Mesh(new THREE.PlaneGeometry(len, H2), new THREE.MeshBasicMaterial({ map: tex2 }));
+    const H2 = 14, up = new THREE.Mesh(new THREE.PlaneGeometry(len, H2), new THREE.MeshBasicMaterial({ map: tex2 })); crowdMats.push(up.material);
     up.rotation.x = -0.75; up.position.set(0, 21.4 + (H2 / 2) * Math.cos(0.75), -17.4 - (H2 / 2) * Math.sin(0.75)); grp.add(up);
     const roof = new THREE.Mesh(new THREE.BoxGeometry(len, 0.6, 20), new THREE.MeshStandardMaterial({ color: 0x39404d }));
     roof.position.set(0, 33.5, -24); grp.add(roof);
@@ -161,6 +204,8 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
   stand(130, 0, 0, -HALF_W - 9);
   stand(86, Math.PI / 2, -HALF_L - 11, 0);
   stand(86, -Math.PI / 2, HALF_L + 11, 0);
+  stand(34, Math.PI / 4, -HALF_L - 1, -HALF_W - 2);         // colturile din spate: stadionul e inchis
+  stand(34, -Math.PI / 4, HALF_L + 1, -HALF_W - 2);
 
   // panouri publicitare
   const adTex = canvasTex(1024, 64, (g, W, H) => {
@@ -176,6 +221,13 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
   const ledTex = [adTex];                                  // panourile LED se misca (vezi main.js)
   const ads = new THREE.Mesh(new THREE.PlaneGeometry(110, 1), new THREE.MeshBasicMaterial({ map: adTex }));
   ads.position.set(0, 0.5, -HALF_W - 4); scene.add(ads);
+  {                                                         // panouri LED si pe partea dinspre camera (se vad jos pe ecran)
+    const t3 = adTex.clone(); t3.needsUpdate = true; t3.repeat.set(2, 1); ledTex.push(t3);
+    const near = new THREE.Mesh(new THREE.PlaneGeometry(110, 0.9), new THREE.MeshBasicMaterial({ map: t3 }));
+    near.rotation.y = Math.PI; near.position.set(0, 0.45, HALF_W + 4); scene.add(near);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(110, 0.9, 0.15), new THREE.MeshStandardMaterial({ color: 0x15181f }));
+    back.position.set(0, 0.45, HALF_W + 4.1); scene.add(back);
+  }
 
   // stegulete de corner
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
@@ -202,7 +254,75 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
       const l = new THREE.Mesh(new THREE.CircleGeometry(0.9, 10), lamp); l.position.set(-3.9 + i * 2.6, -2.1 + j * 2.1, 0.45); head.add(l);
     }
   }
-  return { sun, crowdTex, ledTex };
+  // stralucirea nocturnelor (se vede doar seara)
+  const glowTex = canvasTex(64, 64, (g) => {
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,240,1)'); gr.addColorStop(0.25, 'rgba(255,250,220,0.6)'); gr.addColorStop(1, 'rgba(255,250,220,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  });
+  const glows = [];
+  const glow = (x, y, z, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); sp.position.set(x, y, z); sp.scale.setScalar(s); sp.visible = false; scene.add(sp); glows.push(sp); };
+  for (const sx of [-1, 1]) glow(sx * 74, 45, -57, 26);
+  for (let i = -5; i <= 5; i++) glow(i * 12, 33, -HALF_W - 22, 7);           // lumini sub acoperisul tribunei
+
+  // steaguri care flutura in tribune
+  const flags = [], flagGeo = new THREE.PlaneGeometry(2.2, 1.4, 6, 1);
+  const flagCols = [0x1f5fd6, 0xd62828, 0xffffff, 0xffd400];
+  for (let i = 0; i < 26; i++) {
+    const m = new THREE.Mesh(flagGeo.clone(), new THREE.MeshBasicMaterial({ color: flagCols[i % 4], side: THREE.DoubleSide }));
+    const u = Math.random(), row = Math.random();
+    m.position.set(-60 + u * 120, 4 + row * 12, -HALF_W - 11 - row * 12.5); m.rotation.x = -0.3;
+    m.userData = { ph: Math.random() * 6, base: Float32Array.from(m.geometry.attributes.position.array) };
+    scene.add(m); flags.push(m);
+  }
+  // fumigene colorate in tribune, la gol
+  const smokeTex = canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
+  const smoke = [];
+  for (let i = 0; i < 60; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, transparent: true, depthWrite: false, opacity: 0 }));
+    sp.visible = false; scene.add(sp); smoke.push({ sp, t: 99, vx: 0, vy: 0 });
+  }
+  const sunDay = { c: 0xfff2d8, i: 2.3 }, sunNight = { c: 0xf4f8ff, i: 2.9 };
+  let night = false;
+  function setNight(on) {
+    night = on;
+    scene.background = on ? nightSky : daySky;
+    scene.fog.color.set(on ? 0x0b1222 : 0xcfe6f7);
+    hemi.color.set(on ? 0x7f93b8 : 0xffffff); hemi.groundColor.set(on ? 0x14261a : 0x4a7a3a); hemi.intensity = on ? 0.35 : 1.15;
+    sun.color.set(on ? sunNight.c : sunDay.c); sun.intensity = on ? sunNight.i : sunDay.i;
+    renderer.toneMappingExposure = on ? 1.0 : 1.15;
+    for (const m of crowdMats) m.color.set(on ? 0x5a6274 : 0xffffff);      // tribunele sunt in semiintuneric, terenul e luminat
+    outer.material.color.set(on ? 0x163a17 : 0x2f7429);
+    for (const gl of glows) gl.visible = on;
+  }
+  function flare(color, side) {                              // fumigene in tribuna din spatele portii
+    const c = new THREE.Color(color);
+    smoke.forEach((s, i) => {
+      s.t = -Math.random() * 1.5; s.sp.material.color.copy(c);
+      const along = (Math.random() - 0.5) * 50;
+      s.sp.position.set(side * (HALF_L + 16 + Math.random() * 8), 3 + Math.random() * 6, along);
+      s.vx = (Math.random() - 0.5) * 0.6; s.vy = 1.2 + Math.random() * 1.5; s.sp.visible = true;
+    });
+  }
+  function update(dt, t, excited) {
+    updateNets(dt);
+    // publicul: se misca tot timpul putin, sare la gol
+    crowdTex.forEach((tx, i) => { tx.offset.y = Math.sin(t * (excited ? 9 : 2.2) + i * 1.7) * (excited ? 0.012 : 0.0025); });
+    for (const f of flags) {                                 // steagurile flutura
+      const p = f.geometry.attributes.position, a = p.array, b = f.userData.base;
+      for (let i = 0; i < a.length; i += 3) { const k = (b[i] + 1.1) / 2.2; a[i + 2] = b[i + 2] + Math.sin(t * (excited ? 9 : 5) + f.userData.ph + b[i] * 2.5) * 0.35 * k; }
+      p.needsUpdate = true;
+    }
+    for (const s of smoke) {                                 // fumul urca si se imprastie
+      if (!s.sp.visible) continue;
+      s.t += dt; if (s.t < 0) continue;
+      s.sp.position.x += s.vx * dt; s.sp.position.y += s.vy * dt;
+      const life = s.t / 6; s.sp.scale.setScalar(3 + s.t * 2.2);
+      s.sp.material.opacity = Math.max(0, Math.min(0.75, s.t * 2) * (1 - life));
+      if (life >= 1) s.sp.visible = false;
+    }
+  }
+  return { sun, crowdTex, ledTex, setNight, flare, update, isNight: () => night };
 }
 
 // ---------- minge ----------
