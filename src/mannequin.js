@@ -33,7 +33,27 @@ function kitMaterial(c) {
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vBind;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position;');
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vBind = position;
+        {   // corp de fotbalist: piept si umeri lati, brate si picioare musculoase, gat gros, solduri inguste
+          vec3 p = transformed; float ax = abs(p.x), sx = sign(p.x);
+          float wa = p.y > 1.2 ? smoothstep(0.17, 0.28, ax) : 0.0;          // cat de mult e "brat" (trecere lina la umar)
+          if (p.y > 0.97 && p.y <= 1.53) {                                 // trunchi: lat la piept, mai ingust la talie
+            float k = smoothstep(1.0, 1.34, p.y);
+            p.x = mix(p.x * mix(1.0, 1.18, k), p.x, wa); p.z = mix(p.z * mix(1.0, 1.12, k), p.z, wa);
+          }
+          if (wa > 0.0) {                                                  // brate (in poza de baza sunt orizontale)
+            float sh = 1.0 + 0.1 * (1.0 - smoothstep(0.26, 0.4, ax)), f = mix(1.0, 1.22 * sh, wa);
+            p.y = 1.42 + (p.y - 1.42) * f; p.z *= f; p.x += sx * 0.032 * wa;
+          } else if (p.y > 0.8 && p.y <= 0.97) {                           // solduri
+            p.x *= 0.93;
+          } else if (p.y > 0.06 && p.y <= 0.8) {                           // coapse si gambe musculoase
+            float lx = sx * 0.095, m = mix(1.1, 1.2, smoothstep(0.3, 0.7, p.y));
+            p.x = lx + (p.x - lx) * m; p.z *= m;
+          }
+          if (p.y > 1.46 && ax < 0.09) { p.x *= 1.3; p.z *= 1.25; }       // gat
+          transformed = p;
+        }`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vBind;\nuniform vec3 uShirt, uShorts, uSocks, uSkin, uBoot;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', `
         float y = vBind.y, ax = abs(vBind.x);

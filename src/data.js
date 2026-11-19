@@ -15,7 +15,7 @@ export const TEAMS = [
       { name: 'Rodri',      num: 16, spd: 66, sho: 78, pas: 88, dri: 82, def: 88, t: 0, h: 0x3a2a1c, b: 1 },
       { name: 'Bellingham', num: 5,  spd: 80, sho: 86, pas: 86, dri: 88, def: 78, t: 1, s: 'buzz' },
       { name: 'Messi',      num: 10, spd: 80, sho: 92, pas: 93, dri: 96, def: 35, t: 0, h: 0x4a3423, b: 1 },
-      { name: 'Haaland',    num: 9,  spd: 90, sho: 95, pas: 68, dri: 80, def: 45, t: 0, h: 0xe0c070, s: 'bun' },
+      { name: 'Haaland',    num: 9,  spd: 90, sho: 95, pas: 68, dri: 80, def: 45, t: 0, h: 0xe0c070 },
       { name: 'Mbappé',     num: 7,  spd: 97, sho: 92, pas: 82, dri: 93, def: 36, t: 2, s: 'bald' },
     ],
     // rezerve (gk: 1 = portar de rezerva)

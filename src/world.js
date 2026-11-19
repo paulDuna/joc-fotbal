@@ -406,8 +406,8 @@ function faceTexture(skinHex, hairHex, seed, beard) {
       g.fillStyle = '#080808'; g.beginPath(); g.arc(ex, ey, 1.0, 0, Math.PI * 2); g.fill();
       g.fillStyle = 'rgba(255,255,255,0.9)'; g.fillRect(ex + 0.6, ey - 1.2, 1, 1);
       g.strokeStyle = 'rgba(20,10,5,0.75)'; g.lineWidth = 1; g.beginPath(); g.ellipse(ex, ey, 4.4, 2.5, 0, Math.PI, Math.PI * 2); g.stroke();   // pleoapa
-      g.strokeStyle = css(hairHex); g.lineWidth = 2.2; g.lineCap = 'round';                                              // spranceana
-      g.beginPath(); g.moveTo(ex - s * 4.5, ey - 5.2); g.quadraticCurveTo(ex, ey - 7.2, ex + s * 5, ey - 5.5); g.stroke();
+      g.strokeStyle = css(hairHex); g.lineWidth = 3.4; g.lineCap = 'round';                                              // spranceana groasa, dreapta (barbateasca)
+      g.beginPath(); g.moveTo(ex - s * 5, ey - 4.6); g.quadraticCurveTo(ex, ey - 6.0, ex + s * 5.5, ey - 5.2); g.stroke();
     }
     if (beard) {                                          // barba pictata: pe falci, barbie si mustata, nu o masca
       const c = new THREE.Color(hairHex), rgb = `${(c.r * 255) | 0},${(c.g * 255) | 0},${(c.b * 255) | 0}`;
@@ -420,8 +420,12 @@ function faceTexture(skinHex, hairHex, seed, beard) {
       g.filter = 'none';
     }
     g.strokeStyle = 'rgba(0,0,0,0.14)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(cx - 3, 69); g.quadraticCurveTo(cx, 71, cx + 3, 69); g.stroke();   // nari
-    g.fillStyle = 'rgba(150,60,55,0.75)'; g.beginPath(); g.ellipse(cx, 77, 6, 1.8, 0, 0, Math.PI * 2); g.fill();                                   // buze
-    g.strokeStyle = 'rgba(60,20,15,0.7)'; g.lineWidth = 0.9; g.beginPath(); g.moveTo(cx - 6, 77); g.quadraticCurveTo(cx, 78.2, cx + 6, 77); g.stroke();
+    // falca si barbia: umbra de barba nerasa (la toti), ca fata sa para de barbat
+    g.filter = 'blur(2px)'; g.fillStyle = 'rgba(40,30,25,0.13)';
+    g.beginPath(); g.moveTo(cx - 22, 66); g.quadraticCurveTo(cx - 20, 92, cx, 95); g.quadraticCurveTo(cx + 20, 92, cx + 22, 66); g.lineTo(cx + 15, 70); g.quadraticCurveTo(cx, 86, cx - 15, 70); g.closePath(); g.fill();
+    g.filter = 'none';
+    g.fillStyle = 'rgba(125,75,65,0.45)'; g.beginPath(); g.ellipse(cx, 77, 5.5, 1.1, 0, 0, Math.PI * 2); g.fill();                                  // buze subtiri, nu rosii
+    g.strokeStyle = 'rgba(55,25,20,0.75)'; g.lineWidth = 1.0; g.beginPath(); g.moveTo(cx - 5.5, 77); g.lineTo(cx + 5.5, 77); g.stroke();
   });
   return t;
 }
@@ -454,9 +458,11 @@ export function makeHead({ skinTone, hair, num, style, beard }) {
   const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y - Y, z); o.castShadow = true; grp.add(o); return o; };
   const skin2 = skinMat(SKIN[skinTone] ?? SKIN[0]);
   const faceMat = new THREE.MeshStandardMaterial({ map: faceTexture(SKIN[skinTone] ?? SKIN[0], hair ?? 0x18120e, num, beard), roughness: 0.55 });
-  add(G.head, faceMat, 0, 1.73, 0).scale.set(0.95, 1.1, 1);
-  add(G.nose, skin2, 0, 1.718, 0.115).scale.set(0.6, 0.95, 0.75);
-  for (const sx of [-1, 1]) add(G.ear, skin2, sx * 0.112, 1.725, 0).scale.set(0.4, 1, 0.7);
+  add(G.head, faceMat, 0, 1.73, 0).scale.set(1.0, 1.08, 1.0);                     // fata mai lata, falca patrata
+  add(G.nose, skin2, 0, 1.716, 0.118).scale.set(0.75, 1.1, 0.85);
+  for (const sx of [-1, 1]) add(G.ear, skin2, sx * 0.118, 1.725, 0).scale.set(0.4, 1, 0.7);
+  if (!G.jaw) G.jaw = new THREE.SphereGeometry(0.075, 16, 10);
+  add(G.jaw, skin2, 0, 1.652, 0.02).scale.set(1.3, 0.62, 1.0);               // barbie puternica
   addHair(null, add, style, mat(hair ?? 0x18120e));
   return grp;
 }
