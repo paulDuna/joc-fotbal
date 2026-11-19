@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { TEAMS, FORMATION } from './data.js';
-import { buildWorld, makeBall, makePlayerMesh, makeMarker, netHit, netDepthAt, HALF_L, HALF_W, GOAL_W, GOAL_H, BALL_R } from './world.js';
+import { TEAMS, FORMATION, SKIN } from './data.js';
+import { buildWorld, makeBall, makePlayerMesh, makeHead, makeMarker, netHit, netDepthAt, HALF_L, HALF_W, GOAL_W, GOAL_H, BALL_R } from './world.js';
 import { initAudio, sfx } from './audio.js';
-import { loadMannequin, makeMannequin, animateMannequin } from './mannequin.js';
+import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose } from './mannequin.js';
 
 let HALF_SECONDS = 240;           // durata reala a unei reprize (se alege din meniu)
 // lungimea reala a reprizei curente, cu tot cu minutele de prelungire (+X) date de arbitru
@@ -249,18 +249,20 @@ let manReady = false, useMan = true;
 try { useMan = localStorage.getItem('fotbal_model') !== 'clasic'; } catch (_) {}
 function attachMannequin(p) {
   if (!manReady) return;
-  if (p.man) p.group.remove(p.man.root);
-  const t = TEAMS[p.team];
-  p.man = makeMannequin(p.isGK ? t.gk : t.color, p.isGK ? t.gk : t.shorts);
+  if (p.man) { p.group.remove(p.man.root); if (p.man.head) p.group.remove(p.man.head); }
+  const t = TEAMS[p.team], d = p.d, BOOTS = [0x111111, 0xffffff, 0xff4fa3, 0x29e3ff, 0xc6ff2e, 0xff7a1a, 0xffd400, 0x111111];
+  // manechin imbracat ca un fotbalist (tricou, sort, jambiere, ghete) + capul jucatorului (fata, par, barba)
+  p.man = makeMannequin({ shirt: p.isGK ? t.gk : t.color, shorts: p.isGK ? t.gk : t.shorts, socks: p.isGK ? t.gk : t.socks, skin: SKIN[d.t] ?? SKIN[0], boot: BOOTS[(d.num * 7 + (d.t || 0)) % BOOTS.length] });
   p.man.root.scale.setScalar(p.man.scale / p.group.scale.x);
   p.group.add(p.man.root);
-  p.man.root.visible = useMan; p.body.visible = !useMan;
+  attachHead(p.man, makeHead({ skinTone: d.t, hair: d.h, num: d.num, style: d.s, beard: d.b }), p.group);
+  p.man.root.visible = p.man.head.visible = useMan; p.body.visible = !useMan;
 }
 function setModel(man) {
   useMan = man;
   document.querySelectorAll('.mdl').forEach((el) => el.classList.toggle('sel', (el.dataset.m === 'man') === man));
   try { localStorage.setItem('fotbal_model', man ? 'man' : 'clasic'); } catch (_) {}
-  for (const p of allPlayers) { if (p.man) p.man.root.visible = man; p.body.visible = !(man && p.man); }
+  for (const p of allPlayers) { if (p.man) p.man.root.visible = p.man.head.visible = man; p.body.visible = !(man && p.man); }
 }
 document.querySelectorAll('.mdl').forEach((el) => el.addEventListener('click', () => setModel(el.dataset.m === 'man')));
 setModel(useMan);
@@ -1374,6 +1376,7 @@ function syncGfx(dt) {
       }
       if (p.trickT > 0 && b.rLeg) { const tt = Math.sin(Math.PI * (1 - p.trickT / 0.45)); b.rLeg.rotation.x += 2.0 * tt; if (b.rUpLeg) b.rUpLeg.rotation.x += 0.5 * tt; }
       if (((game.state === 'goal' && p === game.scorer) || ball.throwIn === p || (p.isGK && p.diveT > 0)) && b.lArm && b.rArm) { b.lArm.rotation.z -= 1.2; b.rArm.rotation.z += 1.2; }
+      afterPose(p.man);
     }
   }
   ballGfx.mesh.position.set(ball.x, ball.y + 0.05, ball.z);
@@ -1657,6 +1660,10 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 window.__game = { game, ball, players, tick, log, humans, stats, keys, pressed, released };
+if (new URLSearchParams(location.search).has('maninfo')) {      // test: cum e construit manechinul
+  const pre = document.createElement('pre'); pre.id = 'simout'; document.body.append(pre);
+  const iv = setInterval(() => { if (window.__manInfo) { pre.textContent = JSON.stringify(window.__manInfo); clearInterval(iv); } }, 200);
+}
 if (new URLSearchParams(location.search).has('fktest')) {       // test: fault langa careu pentru echipa omului
   const res = [], dt = 1 / 60;
   try {

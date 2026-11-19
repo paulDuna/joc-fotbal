@@ -412,7 +412,7 @@ function faceTexture(skinHex, hairHex, seed, beard) {
     if (beard) {                                          // barba pictata: pe falci, barbie si mustata, nu o masca
       const c = new THREE.Color(hairHex), rgb = `${(c.r * 255) | 0},${(c.g * 255) | 0},${(c.b * 255) | 0}`;
       g.filter = 'blur(1.5px)';                            // margini moi, ca firele de par
-      g.fillStyle = `rgba(${rgb},0.6)`;
+      g.fillStyle = `rgba(${rgb},0.42)`;
       g.beginPath(); g.moveTo(cx - 24, 62); g.quadraticCurveTo(cx - 22, 92, cx, 96); g.quadraticCurveTo(cx + 22, 92, cx + 24, 62);
       g.lineTo(cx + 18, 64); g.quadraticCurveTo(cx + 14, 82, cx, 84); g.quadraticCurveTo(cx - 14, 82, cx - 18, 64); g.closePath(); g.fill();
       g.beginPath(); g.ellipse(cx, 74, 8, 2.4, 0, 0, Math.PI * 2); g.fill();                                                                       // mustata
@@ -444,6 +444,21 @@ function addHair(body, add, style, hairMat) {
   cap.scale.set(style === 'buzz' ? 0.955 : 1.0, style === 'buzz' ? 1.08 : 1.15, style === 'buzz' ? 1.0 : 1.05);
   if (style === 'long') add(G.longBack, hairMat, 0, 1.66, -0.08).scale.set(1.2, 1, 0.6);
   if (style === 'bun') add(G.bun, hairMat, 0, 1.87, -0.09);
+}
+
+// capul jucatorului (fata pictata, nas, urechi, par, barba), separat, cu centrul in origine:
+// il punem pe manechin, ca sa semene cu jucatorul adevarat (frizura, barba, culoarea pielii)
+export function makeHead({ skinTone, hair, num, style, beard }) {
+  geos();
+  const grp = new THREE.Group(), Y = 1.73;
+  const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y - Y, z); o.castShadow = true; grp.add(o); return o; };
+  const skin2 = skinMat(SKIN[skinTone] ?? SKIN[0]);
+  const faceMat = new THREE.MeshStandardMaterial({ map: faceTexture(SKIN[skinTone] ?? SKIN[0], hair ?? 0x18120e, num, beard), roughness: 0.55 });
+  add(G.head, faceMat, 0, 1.73, 0).scale.set(0.95, 1.1, 1);
+  add(G.nose, skin2, 0, 1.718, 0.115).scale.set(0.6, 0.95, 0.75);
+  for (const sx of [-1, 1]) add(G.ear, skin2, sx * 0.112, 1.725, 0).scale.set(0.4, 1, 0.7);
+  addHair(null, add, style, mat(hair ?? 0x18120e));
+  return grp;
 }
 
 export function makePlayerMesh(scene, { shirt, shorts, socks, skinTone, hair, num, style, beard }) {
