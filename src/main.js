@@ -558,6 +558,7 @@ function restart(team, x, z, text, useGK, forced) {
   setOwner(taker); ball.protectT = 2.5;
   if (!taker.isGK) taker.holdT = 0.9;
   if (text.startsWith('Fault') || text.startsWith('OFSAID')) setFreeKick(taker, text.startsWith('Fault'));
+  else { ball.freeKick = taker; game.fkT = 0; }          // aut, corner, lovitura de poarta: toti asteapta pana se executa
   const secs = text.includes('\n') ? 2.4 : 1.2;
   game.freeze = secs - 0.3; showMsg(text, secs); sfx.whistle();
 }
@@ -798,7 +799,7 @@ function formationTarget(p) {
 function carrierAI(p, dt) {
   const s = p.sign, gx = HALF_L * s, dg = Math.hypot(gx - p.x, p.z);
   const opp = nearestOpp(p);
-  if (ball.freeKick === p) {                              // lovitura libera / penalty batut de calculator
+  if (ball.freeKick === p && ball.throwIn !== p && ball.cornerK !== p) {   // lovitura libera / penalty batut de calculator
     move(p, 0, 0, 0, dt);
     const gdx = gx - p.x, gdz = -p.z, gl = Math.hypot(gdx, gdz) || 1; face(p, gdx / gl, gdz / gl, Math.min(1, 6 * dt));
     if (game.fkT > 2) {
