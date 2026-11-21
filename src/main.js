@@ -6,7 +6,7 @@ import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose }
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 30;
+const BUILD = 31;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -364,7 +364,8 @@ let lastClock = '';
 function updateHud() {
   if (game.drill) {                                       // antrenament: in loc de ceas, timpul sau incercarea
     const d = game.drill;
-    const s = d.type === 'sprint' ? (d.phase === 'run' ? d.t.toFixed(1) + ' s' : '🏃 ' + (d.n + 1) + '/' + d.runs) : '🎯 ' + Math.min(d.n + 1, d.total) + '/' + d.total;
+    const s = d.type === 'sprint' ? (d.phase === 'run' ? d.t.toFixed(1) + ' s' : '🏃 ' + (d.n + 1) + '/' + d.runs) : d.type === 'pass' ? (d.phase === 'done' ? d.final.toFixed(1) : d.t.toFixed(1)) + ' s' : '🎯 ' + Math.min(d.n + 1, d.total) + '/' + d.total;
+    if (d.type === 'pass') $('sc').textContent = '👟 ' + d.score + '/' + d.total;
     if (s !== lastClock) { $('clock').textContent = s; lastClock = s; }
     if (d.type === 'fk') $('sc').textContent = '⚽ ' + d.score;
   }
@@ -561,7 +562,7 @@ function fkAimStep(h, dt) {
 }
 
 function restart(team, x, z, text, useGK, forced) {
-  if (game.drill) return drillOutcome(false, 'Pe lângă!');   // antrenament: mingea a iesit = ratat
+  if (game.drill) return game.drill.type === 'pass' ? passReset('Mingea a ieșit! +2 secunde') : drillOutcome(false, 'Pe lângă!');   // antrenament: mingea a iesit
   ball.offside = ball.throwIn = ball.cornerK = ball.freeKick = null;
   let taker = forced && players.includes(forced) && !forced.isGK ? forced : null, best = 1e9;
   if (useGK) taker = gkOf(team);
@@ -643,7 +644,7 @@ function statLine() {
 }
 
 function goal(team) {
-  if (game.drill) return drillOutcome(true);
+  if (game.drill) return game.drill.type === 'pass' ? passReset('Mingea a ieșit! +2 secunde') : drillOutcome(true);
   game.score[team]++; updateScore();
   const sc = ball.lastPlayer;
   const who = sc ? (sc.team === team ? sc.d.name : 'autogol ' + sc.d.name) : '';
@@ -717,7 +718,7 @@ function doPass(p, m, dx, dz, through) {
   const e = rnd((1 - p.d.pas / 100) * 0.16), c = Math.cos(e), s = Math.sin(e);
   [dx, dz] = [dx * c - dz * s, dx * s + dz * c];
   p.fx = dx; p.fz = dz;
-  const off = m && ball.protectT <= 0 && m.x * p.sign > offLine[p.team] + 0.3;
+  const off = !game.drill && m && ball.protectT <= 0 && m.x * p.sign > offLine[p.team] + 0.3;   // la antrenament nu e ofsaid
   const lineAtPass = offLine[p.team];
   kick(p, dx * sp, vy, dz * sp);
   ball.passTarget = m || null; ball.offside = off ? m : null; ball.offLineX = lineAtPass;
@@ -1158,6 +1159,7 @@ function step(dt) {
     if (p.stunT > 0) { move(p, 0, 0, 0, dt); continue; }
     if (fk && p !== fk) { move(p, 0, 0, 0, dt); if (!p.human) { const bx = ball.x - p.x, bz = ball.z - p.z, bl = Math.hypot(bx, bz) || 1; face(p, bx / bl, bz / bl, Math.min(1, 5 * dt)); } continue; }
     if (p.human) continue;
+    if (game.drill && game.drill.type === 'pass' && chasers[p.team] !== p) { move(p, 0, 0, 0, dt); const bx = ball.x - p.x, bz = ball.z - p.z, bl = Math.hypot(bx, bz) || 1; face(p, bx / bl, bz / bl, Math.min(1, 6 * dt)); continue; }   // la pase colegii stau pe loc
     if (p.isGK) gkAI(p, dt); else updateAI(p, dt);
   }
   // jucatorii nu trec unii prin altii
@@ -1418,6 +1420,11 @@ function syncGfx(dt) {
     const pt = ball.owner === p && game.state === 'play' ? h.passTo : null;
     h.tgt.visible = !!pt; if (pt) h.tgt.position.set(pt.x, 0.035, pt.z);
   }
+  if (game.drill && game.drill.type === 'pass' && game.drill.target && game.drill.phase !== 'done') {   // colegul caruia trebuie sa-i dai pasa
+    const q = game.drill.target, mk = MARKERS[1];
+    mk.ring.position.set(q.x, 0.04, q.z); mk.sprite.position.set(q.x, 3.1, q.z); mk.setText('PASĂ AICI');
+    mk.ring.scale.setScalar(1 + 0.15 * Math.sin(performance.now() / 120));
+  }
   if (dt > 0) { hist.unshift([ball.x, ball.y, ball.z]); if (hist.length > 13) hist.pop(); }
   const fast = !ball.owner && game.state !== 'replay' && Math.hypot(ball.vx, ball.vz) > 17;
   trail.forEach((m, i) => { const h = hist[(i + 1) * 2]; m.visible = fast && !!h; if (m.visible) m.position.set(h[0], h[1] + 0.05, h[2]); });
@@ -1447,7 +1454,7 @@ function syncGfx(dt) {
 }
 
 // ---------- antrenamente inainte de meci: sprint, lovituri libere, penalty-uri ----------
-const TRAIN_BEST = { sprint: null, fk: null, pen: null };
+const TRAIN_BEST = { sprint: null, fk: null, pen: null, pass: null };
 try { Object.assign(TRAIN_BEST, JSON.parse(localStorage.getItem('fotbal_train') || '{}')); } catch (_) {}
 const saveBest = () => { try { localStorage.setItem('fotbal_train', JSON.stringify(TRAIN_BEST)); } catch (_) {} };
 const sprintLines = [-1, 1].map((s) => {                 // linia verde de start si linia rosie de sosire
@@ -1461,11 +1468,12 @@ function openTrain(result) {
   $('menu').classList.add('hidden'); $('touch').classList.add('hidden'); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden');
   $('p1').classList.add('hidden'); MARKERS.forEach((m) => m.setVisible(false));
   const b = TRAIN_BEST;
-  $('trBest').innerHTML = 'Recorduri: 🏃 ' + (b.sprint ? b.sprint.toFixed(2) + ' s' : '–') + ' · 🎯 ' + (b.fk ?? '–') + '/5 · ⚽ ' + (b.pen ?? '–') + '/5';
+  $('trBest').innerHTML = 'Recorduri: 🏃 ' + (b.sprint ? b.sprint.toFixed(2) + ' s' : '–') + ' · 🎯 ' + (b.fk ?? '–') + '/5 · ⚽ ' + (b.pen ?? '–') + '/5 · 👟 pase ' + (b.pass ? b.pass.toFixed(1) + ' s' : '–');
   $('trResult').textContent = result || '';
   $('trainPanel').classList.remove('hidden');
 }
 function drillCleanup() {
+  MARKERS[1].setVisible(false); MARKERS[1].ring.scale.setScalar(1);
   if (!game.drill && !sprintLines[0].visible) return;
   game.drill = null; game.fkAim = null; game.penView = null; fkDots.visible = false;
   sprintLines.forEach((m) => { m.visible = false; });
@@ -1513,6 +1521,52 @@ function startPenDrill() {
   game.drill = { type: 'pen', n: 0, total: 5, score: 0, phase: 'aim', t: 0 };
   startShootout();
 }
+// pase: 4 colegi pe teren, unul e marcat "PASA AICI"; 10 pase corecte cat mai repede
+const PASS_SPOTS = [[-20, 0], [0, -14], [0, 14], [18, -7], [18, 8]];
+function startPassDrill() {
+  const mates = squad[myTeam].filter((q) => !q.isGK).sort((a, b) => b.d.pas - a.d.pas).slice(0, 5);
+  drillSetup(mates);
+  mates.forEach((p, i) => { p.x = PASS_SPOTS[i][0]; p.z = PASS_SPOTS[i][1]; p.fx = 1; p.fz = 0; });
+  game.drill = { type: 'pass', n: 0, total: 10, score: 0, phase: 'ready', t: 0, target: null, done: false };
+  ball.x = mates[0].x + 0.6; ball.z = mates[0].z; ball.y = BALL_R; ball.vx = ball.vy = ball.vz = 0;
+  setOwner(mates[0]); ball.protectT = 0;
+  passNewTarget();
+  game.state = 'play'; game.freeze = 1.5;
+  showMsg('👟 Pase\nDă pasa colegului marcat cu galben!', 2.4);
+  toast(isTouch ? 'Joystick spre coleg + PASĂ' : 'Direcția spre coleg (W A S D) + PASĂ (F)', 4);
+  MARKERS[1].setVisible(true);
+}
+function passNewTarget() {
+  const d = game.drill, own = ball.owner;
+  const opts = players.filter((q) => q !== own && q !== d.target);
+  d.target = opts[Math.floor(Math.random() * opts.length)];
+}
+function passWatch(dt) {
+  const d = game.drill;
+  if (d.phase === 'ready') { d.phase = 'run'; d.t = 0; }
+  if (d.phase !== 'run') return;
+  d.t += dt;
+  if (ball.owner && ball.owner === d.target) {           // pasa a ajuns la cine trebuia
+    d.score++; sfx.kick(0.25);
+    if (d.score >= d.total) {
+      d.done = true; d.rec = !TRAIN_BEST.pass || d.t < TRAIN_BEST.pass;   // d.t = timpul pentru toate pasele
+      if (d.rec) { TRAIN_BEST.pass = d.t; saveBest(); sfx.goal(); }
+      showMsg('✅ 10 pase în ' + d.t.toFixed(1) + ' secunde' + (d.rec ? '\n🏆 Record nou!' : ''), 2.6);
+      d.final = d.t; d.t = 0; d.phase = 'done'; d.n = d.total; game.state = 'train'; MARKERS[1].setVisible(false);
+      return;
+    }
+    toast('✔ ' + d.score + ' / ' + d.total, 0.9);
+    passNewTarget();
+  }
+}
+function passReset(text) {                               // mingea a iesit: o primeste colegul cel mai apropiat
+  const d = game.drill; let best = null, bd = 1e9;
+  for (const q of players) { const dd = Math.hypot(q.x - ball.x, q.z - ball.z); if (dd < bd) { bd = dd; best = q; } }
+  best.x = clamp(best.x, -HALF_L + 3, HALF_L - 3); best.z = clamp(best.z, -HALF_W + 3, HALF_W - 3);
+  ball.vx = ball.vy = ball.vz = 0; ball.offside = ball.throwIn = ball.cornerK = ball.freeKick = null;
+  setOwner(best); d.t += 2; if (d.target === best) passNewTarget();
+  toast(text, 1.6); sfx.whistle();
+}
 function nextDrillShot() {
   const d = game.drill; d.phase = 'aim'; d.t = 0;
   const opp = 1 - myTeam, side = -squad[opp][0].sign, p = d.taker, k = gkOf(opp);
@@ -1529,7 +1583,9 @@ function nextDrillShot() {
   toast(isTouch ? 'Joystick sus/jos = ținta · stânga/dreapta = efectul · ține ȘUT' : 'W/S = ținta · A/D = efectul · ține ȘUT (G)', 4);
 }
 function drillWatch(dt) {                                 // in timpul jocului: a intrat mingea? a aparat portarul?
-  const d = game.drill; if (d.type !== 'fk') return;
+  const d = game.drill;
+  if (d.type === 'pass') return passWatch(dt);
+  if (d.type !== 'fk') return;
   if (d.phase === 'aim' && !game.fkAim && !ball.freeKick) { d.phase = 'shot'; d.t = 0; }
   if (d.phase !== 'shot') return;
   d.t += dt;
@@ -1564,6 +1620,7 @@ function drillStep(dt) {
     if (d.phase === 'done' && d.t > 2.6) { d.n++; if (d.n >= d.runs) endDrill(); else sprintReady(); }
     return;
   }
+  if (d.type === 'pass') { idleStep(dt); if (d.t > 2.8) endDrill(); return; }   // dupa ultimele pase
   idleStep(dt);                                           // intre incercari: mingea se opreste
   if (d.phase === 'wait' && d.t > 2) { if (d.n >= d.total) endDrill(); else nextDrillShot(); }
 }
@@ -1571,6 +1628,7 @@ function endDrill() {
   const d = game.drill;
   let res;
   if (d.type === 'sprint') res = '🏃 Sprint: cel mai bun timp ' + (d.best ? d.best.toFixed(2) + ' s' : '–');
+  else if (d.type === 'pass') res = d.done ? '👟 Pase: 10 pase în ' + d.final.toFixed(1) + ' secunde' + (d.rec ? ' · 🏆 Record nou!' : '') : '👟 Pase: ' + d.score + ' din 10';
   else {
     const key = d.type; if (TRAIN_BEST[key] == null || d.score > TRAIN_BEST[key]) { TRAIN_BEST[key] = d.score; saveBest(); }
     res = (d.type === 'fk' ? '🎯 Lovituri libere: ' : '⚽ Penalty-uri: ') + d.score + ' goluri din ' + d.total;
@@ -1581,6 +1639,7 @@ $('trOpen').addEventListener('click', () => { initAudio(); goFullscreen(); openT
 $('trSprint').addEventListener('click', () => { initAudio(); startSprint(); });
 $('trFk').addEventListener('click', () => { initAudio(); startFkDrill(); });
 $('trPen').addEventListener('click', () => { initAudio(); startPenDrill(); });
+$('trPass').addEventListener('click', () => { initAudio(); startPassDrill(); });
 $('trPlay').addEventListener('click', () => { initAudio(); drillCleanup(); $('trainPanel').classList.add('hidden'); startMatch(1); });
 $('trBack').addEventListener('click', () => { $('trainPanel').classList.add('hidden'); toMenu(); });
 
@@ -1845,6 +1904,9 @@ if (new URLSearchParams(location.search).has('traintest')) {   // test: cele tre
     res.push('fk dupa sut: n=' + game.drill.n + ' scor=' + game.drill.score + ' faza=' + game.drill.phase + ' state=' + game.state);
     drillCleanup(); startPenDrill();
     for (let k = 0; k < 5; k++) { T(100); press('KeyG'); T(20); rel('KeyG'); T(260); }
+    drillCleanup(); startPassDrill(); T(100);
+    for (let k = 0; k < 40 && game.drill && game.drill.phase === 'run'; k++) { const o = ball.owner, tg = game.drill.target; if (o && tg) { const dx = tg.x - o.x, dz = tg.z - o.z, l = Math.hypot(dx, dz); LOCAL.stick.x = dx / l; LOCAL.stick.z = dz / l; LOCAL.stick.mag = 1; ['KeyD','KeyA','KeyW','KeyS'].forEach((c) => LOCAL.keys.delete(c)); if (dx > 0.3 * l) press('KeyD'); if (dx < -0.3 * l) press('KeyA'); if (dz > 0.3 * l) press('KeyS'); if (dz < -0.3 * l) press('KeyW'); T(2); press('KeyF'); T(1); rel('KeyF'); ['KeyD','KeyA','KeyW','KeyS'].forEach(rel); LOCAL.stick.mag = 0; } T(90); }
+    res.push('pase: scor=' + (game.drill ? game.drill.score + ' faza=' + game.drill.phase + ' t=' + game.drill.t.toFixed(1) : 'terminat') + ' rezultat=' + $('trResult').textContent);
     res.push('pen: ' + (game.drill ? 'n=' + game.drill.n : 'terminat') + ' rezultat="' + $('trResult').textContent + '" panou=' + !$('trainPanel').classList.contains('hidden'));
   } catch (e) { res.push('ERR ' + e.stack); }
   const pre = document.createElement('pre'); pre.id = 'simout'; pre.textContent = res.join(' | '); document.body.append(pre);
