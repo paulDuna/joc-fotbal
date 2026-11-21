@@ -1,7 +1,7 @@
 // Service worker: jocul merge si fara internet dupa prima deschidere.
 // Mereu incearca intai versiunea noua de pe server (ca modificarile sa apara imediat),
 // iar daca serverul nu raspunde, foloseste copia salvata.
-const CACHE = 'fotbal3d-v1';
+const CACHE = 'fotbal3d-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
   './src/main.js', './src/world.js', './src/data.js', './src/audio.js', './src/mannequin.js',
   './lib/three.module.min.js', './lib/addons/loaders/GLTFLoader.js', './lib/addons/utils/SkeletonUtils.js',
@@ -16,7 +16,8 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request).then((res) => {
+    // 'no-cache': intreaba mereu serverul daca fisierul s-a schimbat (altfel telefonul tinea codul vechi pana la 10 minute)
+    fetch(e.request, { cache: 'no-cache' }).then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); }
       return res;
     }).catch(() => caches.match(e.request, { ignoreSearch: true }))

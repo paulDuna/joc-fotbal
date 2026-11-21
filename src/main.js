@@ -4,6 +4,15 @@ import { buildWorld, makeBall, makePlayerMesh, makeHead, makeMarker, netHit, net
 import { initAudio, sfx } from './audio.js';
 import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose } from './mannequin.js';
 
+// versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
+// un meniu nou dar cod vechi (salvat), se reincarca singur o data.
+const BUILD = 30;
+{
+  const m = /versiunea (\d+)/.exec(document.body.textContent);
+  try {
+    if (m && +m[1] !== BUILD && sessionStorage.getItem('fotbal_reload') !== m[1]) { sessionStorage.setItem('fotbal_reload', m[1]); setTimeout(() => location.reload(), 400); }
+  } catch (_) {}
+}
 let HALF_SECONDS = 240;           // durata reala a unei reprize (se alege din meniu)
 // lungimea reala a reprizei curente, cu tot cu minutele de prelungire (+X) date de arbitru
 const periodMin = () => (game.half <= 2 ? 45 : 15);
@@ -1568,6 +1577,7 @@ function endDrill() {
   }
   openTrain(res);
 }
+$('trOpen').addEventListener('click', () => { initAudio(); goFullscreen(); openTrain(); });
 $('trSprint').addEventListener('click', () => { initAudio(); startSprint(); });
 $('trFk').addEventListener('click', () => { initAudio(); startFkDrill(); });
 $('trPen').addEventListener('click', () => { initAudio(); startPenDrill(); });
