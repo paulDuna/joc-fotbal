@@ -91,7 +91,8 @@ export function makeMannequin(c) {
     acts[n] = a;
   }
   const bone = (name) => { let b = null; root.traverse((o) => { if (!b && o.isBone && o.name.endsWith(name)) b = o; }); return b; };
-  const bones = { rUpLeg: bone('RightUpLeg'), rLeg: bone('RightLeg'), lUpLeg: bone('LeftUpLeg'), lArm: bone('LeftArm'), rArm: bone('RightArm'), spine: bone('Spine'), head: bone('Head') };
+  const bones = { rUpLeg: bone('RightUpLeg'), rLeg: bone('RightLeg'), lUpLeg: bone('LeftUpLeg'), lArm: bone('LeftArm'), rArm: bone('RightArm'), spine: bone('Spine'), head: bone('Head'),
+    lFore: bone('LeftForeArm'), rFore: bone('RightForeArm'), lHand: bone('LeftHand'), rHand: bone('RightHand'), spine2: bone('Spine2'), neck: bone('Neck') };
   return { root, mixer, acts, bones, scale: baseScale, head: null, headCorr: null };
 }
 
@@ -120,5 +121,25 @@ export function animateMannequin(m, sp, dt) {
   if (m.acts.walk) { m.acts.walk.setEffectiveWeight(wWalk); m.acts.walk.timeScale = Math.min(1.6, Math.max(0.6, sp / 1.6)); }
   if (m.acts.run) { m.acts.run.setEffectiveWeight(wRun); m.acts.run.timeScale = Math.min(1.5, Math.max(0.7, sp / 6.5)); }
   m.mixer.update(dt);
+}
+// intoarce un os ca sa arate intr-o directie data (in lume), oricum ar fi asezate axele lui
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _dq = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _bq = new THREE.Quaternion();
+function pointBone(bone, child, dir, w) {
+  bone.getWorldPosition(_a); child.getWorldPosition(_b);
+  const cur = _b.sub(_a).normalize();
+  _dq.setFromUnitVectors(cur, dir); if (w < 1) _dq.slerp(new THREE.Quaternion(), 1 - w);
+  bone.getWorldQuaternion(_bq); _bq.premultiply(_dq);
+  bone.parent.getWorldQuaternion(_pq); bone.quaternion.copy(_pq.invert().multiply(_bq));
+  bone.updateMatrixWorld(true);
+}
+// portarul plonjeaza: bratele intinse peste cap (in prelungirea corpului), spre minge
+export function armsUp(m, w = 1) {
+  const b = m.bones; if (!b.lArm || !b.lFore || !b.spine2 || !b.neck) return;
+  m.root.updateMatrixWorld(true);
+  b.spine2.getWorldPosition(_a); b.neck.getWorldPosition(_b);
+  const up = _b.clone().sub(_a).normalize();
+  for (const [arm, fore, hand] of [[b.lArm, b.lFore, b.lHand], [b.rArm, b.rFore, b.rHand]]) {
+    pointBone(arm, fore, up, w); if (hand) pointBone(fore, hand, up, w);
+  }
 }
 export function afterPose(m) { if (m.head && m.bones.head) placeHead(m); }   // dupa ce am modificat oasele (sut, braziliana)

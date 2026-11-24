@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import { TEAMS, FORMATION, SKIN } from './data.js';
 import { buildWorld, makeBall, makePlayerMesh, makeHead, makeMarker, netHit, netDepthAt, HALF_L, HALF_W, GOAL_W, GOAL_H, BALL_R } from './world.js';
 import { initAudio, sfx } from './audio.js';
-import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose } from './mannequin.js';
+import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose, armsUp } from './mannequin.js';
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 35;
+const BUILD = 36;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -930,7 +930,7 @@ function gkAI(p, dt) {
         if (d > 0.15) {
           const sp = Math.min((5.2 + p.d.def * 0.024) * (0.75 + 0.25 * dk(p).gk), d / Math.max(dt, t * 0.5));
           p.vx = dx / d * sp; p.vz = dz / d * sp; p.x += p.vx * dt; p.z += p.vz * dt;
-          if (Math.abs(dz) > 1.3 && p.diveT <= 0) { p.diveT = 0.6; p.diveDir = Math.sign(dz * p.fx - dx * p.fz) || 1; }
+          if (Math.abs(dz) > 0.9 && p.diveT <= 0) { p.diveT = 0.9; p.diveDir = Math.sign(dz * p.fx - dx * p.fz) || 1; }   // plonjon
         } else { p.vx = p.vz = 0; }
         return;
       }
@@ -1337,7 +1337,7 @@ function shootoutStep(dt) {
   if (SO.phase === 'flight') {
     if (SO.t > 0.08) {                                   // plonjonul
       const dz = SO.diveZ - k.z;
-      if (Math.abs(dz) > 0.05) { k.z += Math.sign(dz) * Math.min(Math.abs(dz), 7.5 * dt); if (k.diveT <= 0 && Math.abs(SO.diveZ) > 1) { k.diveT = 0.7; k.diveDir = Math.sign(SO.diveZ * k.fx) || 1; } }
+      if (Math.abs(dz) > 0.05) { k.z += Math.sign(dz) * Math.min(Math.abs(dz), 7.5 * dt); if (k.diveT <= 0 && Math.abs(SO.diveZ) > 1) { k.diveT = 0.9; k.diveDir = Math.sign(SO.diveZ * k.fx) || 1; } }
     }
     const prevX = ball.x;
     updateBall(dt);
@@ -1440,7 +1440,8 @@ function syncGfx(dt) {
     p.body.rotation.z += (rz - p.body.rotation.z) * Math.min(1, 14 * dt);
     p.body.position.y = y;
     if (p.man && useMan) {                               // manechinul: miscari filmate + aplecari pentru alunecare, plonjon, sarituri
-      animateMannequin(p.man, sp, dt);
+      const diving = p.isGK && p.diveT > 0;
+      animateMannequin(p.man, diving ? 0 : sp, dt);
       const r = p.man.root, special = p.lungeT > 0 || p.stunT > 0 || (p.isGK && p.diveT > 0);
       r.rotation.x = special ? p.body.rotation.x : 0; r.rotation.z = p.body.rotation.z;
       r.position.y = p.jumpT > 0 || special || p.trickT > 0 ? p.body.position.y : 0;
@@ -1451,6 +1452,12 @@ function syncGfx(dt) {
       }
       if (p.trickT > 0 && b.rLeg) { const tt = Math.sin(Math.PI * (1 - p.trickT / 0.45)); b.rLeg.rotation.x += 2.0 * tt; if (b.rUpLeg) b.rUpLeg.rotation.x += 0.5 * tt; }
       if (game.state === 'goal' && p === game.scorer && sp < 2.5) r.position.y = Math.abs(Math.sin(performance.now() / 160)) * 0.4;   // bucurie: sare de fericire (fara brate "rupte")
+      if (diving) {                                       // plonjonul portarului: zboara culcat in lateral, cu bratele peste cap, apoi cade pe iarba
+        const pr = 1 - p.diveT / 0.9, roll = Math.min(1, pr * 3.2), fly = Math.min(1, pr / 0.65);
+        r.rotation.x = 0; r.rotation.z = -p.diveDir * 1.42 * roll;
+        r.position.y = pr < 0.65 ? Math.sin(Math.PI * fly) * 0.6 + 0.18 * roll : 0.16;
+        armsUp(p.man, Math.min(1, pr * 4));
+      }
       afterPose(p.man);
     }
   }
@@ -1500,6 +1507,10 @@ function syncGfx(dt) {
   if (pv) { camera.position.set(pv.side * (HALF_L - 20.5), 3.3, 0); camera.lookAt(pv.side * HALF_L, 1.0, 0); }   // penalty: vezi din spatele jucatorului, poarta in fata
   if (!!pv !== radarHidden) { radarHidden = !!pv; $('radar').classList.toggle('hidden', radarHidden); }        // radarul ar acoperi mingea
   else if (game.drill && game.drill.type === 'sprint') { const q = game.drill.p; camera.position.set(q.x - 2, 9 * CZ, q.z + 20 * CZ); camera.lookAt(q.x + 4, 0.8, q.z); }
+  if (game.state === 'divetest') {                        // test: poza cu portarul in plonjon
+    const k = squad[1][0]; k.diveT = +(new URLSearchParams(location.search).get('divetest') || 0.5); k.diveDir = 1; k.x = HALF_L - 1; k.z = 0; k.fx = -1; k.fz = 0;
+    camera.position.set(HALF_L - 9, 1.6, 0.5); camera.lookAt(HALF_L - 1, 1.0, 0);
+  }
   if (game.state === 'iconshot') {                        // poza pentru iconita: mingea pe iarba, poarta si nocturnele in spate
     ballGfx.mesh.position.set(HALF_L - 11, 0.16, 0); ballGfx.mesh.rotation.set(0.5, 0.9, 0.2); ballGfx.shadow.position.set(HALF_L - 11, 0.025, 0);
     camera.position.set(HALF_L - 12.75, 0.42, 0.5); camera.lookAt(HALF_L - 10.6, 0.5, -0.1);
@@ -1880,6 +1891,7 @@ if (![...new URLSearchParams(location.search).keys()].some((k) => k !== 'touch')
   $('intro').addEventListener('pointerdown', (e) => { e.preventDefault(); endIntro(); });
 }
 
+if (new URLSearchParams(location.search).has('divetest')) { game.state = 'divetest'; document.body.classList.add('iconshot'); allPlayers.forEach((p) => { p.group.visible = p === squad[1][0]; }); }
 if (new URLSearchParams(location.search).has('iconshot')) {     // doar pentru a face iconita
   world.setNight(true); game.state = 'iconshot'; document.body.classList.add('iconshot');
   allPlayers.forEach((p) => { p.group.visible = p === squad[1][0]; });
