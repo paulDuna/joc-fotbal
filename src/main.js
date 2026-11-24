@@ -6,7 +6,7 @@ import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose }
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 32;
+const BUILD = 33;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -139,6 +139,7 @@ MARKERS.forEach((m) => m.setVisible(false));
 // comenzile: cele locale (tastatura / ecran) si, la jocul online, cele venite de pe celalalt telefon
 let keys = new Set(), pressed = new Set(), released = new Set();
 window.addEventListener('keydown', (e) => {
+  if (game.state === 'intro') { endIntro(); return; }
   if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter' || e.code === 'NumpadEnter') netJoin(e.target.value.trim()); return; }   // scrii codul jocului online
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   if (!LOCAL.keys.has(e.code)) LOCAL.pressed.add(e.code);
@@ -249,7 +250,7 @@ function goalFx(side, z, y, speed, color) {
 }
 window.addEventListener('keydown', (e) => { if (e.code === 'KeyC' && game.state !== 'menu') { setCam(!camTV); toast(camTV ? '📺 Cameră TV' : '🔭 Cameră largă'); } });
 function setPaused(v) {
-  if (game.state === 'menu' || game.state === 'end') v = false;
+  if (game.state === 'menu' || game.state === 'end' || game.state === 'intro') v = false;
   game.paused = v; $('pause').classList.toggle('hidden', !v);
   if (!v) { $('teamPanel').classList.add('hidden'); $('fkPanel').classList.add('hidden'); }
 }
@@ -1448,6 +1449,11 @@ function syncGfx(dt) {
   if (pv) { camera.position.set(pv.side * (HALF_L - 20.5), 3.3, 0); camera.lookAt(pv.side * HALF_L, 1.0, 0); }   // penalty: vezi din spatele jucatorului, poarta in fata
   if (!!pv !== radarHidden) { radarHidden = !!pv; $('radar').classList.toggle('hidden', radarHidden); }        // radarul ar acoperi mingea
   else if (game.drill && game.drill.type === 'sprint') { const q = game.drill.p; camera.position.set(q.x - 2, 9 * CZ, q.z + 20 * CZ); camera.lookAt(q.x + 4, 0.8, q.z); }
+  if (game.state === 'intro') {                           // introducere: zbor lent in jurul stadionului
+    const t = performance.now() / 1000, a = Math.sin(t * 0.13) * 0.85;   // leagan lent, mereu cu tribunele pline in fata
+    camera.position.set(Math.sin(a) * 72, 20 + Math.sin(t * 0.35) * 6, Math.cos(a) * 52);
+    camera.lookAt(Math.sin(a + 0.6) * 8, 2, 0);
+  }
   if (camShot === 'goal') { camera.position.set(HALF_L - 9, 3.2, 7); camera.lookAt(HALF_L, 1.1, 0); }   // test: poza cu poarta
   else if (closeup) { const q = squad[0][closeup]; camera.position.set(q.x + q.fx * 2.6 + 0.6, 1.9, q.z + q.fz * 2.6 + 0.6); camera.lookAt(q.x, 1.4, q.z); }   // test: vezi un jucator de aproape
   world.sun.position.set(cam.x - 40, 80, 50); world.sun.target.position.set(cam.x, 0, 0);
@@ -1806,6 +1812,18 @@ $('netHost').addEventListener('click', () => netHost());
 $('netJoin').addEventListener('click', () => { $('netChoose').classList.add('hidden'); $('netJoinBox').classList.remove('hidden'); setNetStatus('Scrie codul de 4 cifre de pe telefonul prietenului.'); $('netInput').focus(); });
 $('netGo').addEventListener('click', () => netJoin($('netInput').value.trim()));
 $('netBack').addEventListener('click', () => { netClose(); showNetPanel(false); });
+
+// ---------- introducerea: camera zboara in jurul stadionului, apare logo-ul; o atingere te duce in meniu ----------
+function endIntro() {
+  if (game.state !== 'intro') return;
+  initAudio(); sfx.whistle(); sfx.goal();                // publicul te primeste
+  $('intro').classList.add('fade'); setTimeout(() => $('intro').classList.add('hidden'), 750);
+  game.state = 'menu'; $('menu').classList.remove('hidden'); document.body.classList.remove('intro');
+}
+if (![...new URLSearchParams(location.search).keys()].some((k) => k !== 'touch')) {   // la teste (?demo, ?sim...) sarim peste
+  game.state = 'intro'; $('menu').classList.add('hidden'); $('intro').classList.remove('hidden'); document.body.classList.add('intro');
+  $('intro').addEventListener('pointerdown', (e) => { e.preventDefault(); endIntro(); });
+}
 
 // ---------- bucla principala ----------
 const demo = new URLSearchParams(location.search).has('demo');
