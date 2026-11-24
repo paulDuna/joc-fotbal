@@ -91,6 +91,8 @@
   /* ---- echipa si schimbari ---- */
   #teamBtn { position: fixed; top: 12px; right: calc(60px + env(safe-area-inset-right)); width: 40px; height: 40px; border-radius: 50%; background: rgba(12,18,28,.8); display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; }
   body.touch #teamBtn { top: 6px; right: calc(52px + env(safe-area-inset-right)); width: 36px; height: 36px; }
+  #camBtn { position: fixed; top: 12px; right: calc(108px + env(safe-area-inset-right)); width: 40px; height: 40px; border-radius: 50%; background: rgba(12,18,28,.8); display: flex; align-items: center; justify-content: center; font-size: 19px; cursor: pointer; }
+  body.touch #camBtn { top: 6px; right: calc(96px + env(safe-area-inset-right)); width: 36px; height: 36px; }
   /* ---- introducerea ---- */
   #intro { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer;
     background: radial-gradient(ellipse at center, rgba(4,8,18,.15) 0%, rgba(4,8,18,.55) 60%, rgba(2,4,10,.92) 100%); transition: opacity .7s; }
@@ -157,7 +159,7 @@
 <div id="menu">
   <div class="box">
     <h1>⚽ Fotbal 3D</h1>
-    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 34</b></p>
+    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 35</b></p>
     <div class="opts">
       <div class="opt" data-mode="1"><kbd class="keysOnly">1</kbd> <span class="keysOnly">Un jucător (contra calculatorului)</span><span class="touchOnly">▶ Joacă</span></div>
       <div class="opt keysOnly" data-mode="2"><kbd>2</kbd> Doi jucători</div>
@@ -167,7 +169,7 @@
     <div class="difs">Echipa ta: <span class="myt" data-t="0">🔵 Albaștrii (Messi, Mbappé)</span><span class="myt" data-t="1">🔴 Roșiii (Ronaldo, Salah)</span></div>
     <div class="difs">Dificultate: <span class="dif" data-d="0">Ușor</span><span class="dif" data-d="1">Normal</span><span class="dif" data-d="2">Greu</span></div>
     <div class="difs">Repriza: <span class="dur" data-m="2">2 min</span><span class="dur" data-m="4">4 min</span><span class="dur" data-m="6">6 min</span></div>
-    <div class="difs">Cameră: <span class="cam" data-c="tv">TV</span><span class="cam" data-c="larg">Largă</span></div>
+    <div class="difs">Cameră: <span class="cam" data-c="0">1 TV</span><span class="cam" data-c="1">2 Largă</span><span class="cam" data-c="2">3 Sus</span><span class="cam" data-c="3">4 Stadion</span><span class="cam" data-c="4">5 Din spate</span></div>
     <div class="difs">Meci: <span class="tod" data-n="0">☀️ Ziua</span><span class="tod" data-n="1">🌙 Seara (nocturne)</span></div>
     <div class="difs">Jucători:<span class="mdl" data-m="man">Manechin</span><span class="mdl" data-m="clasic">Clasic</span></div>
     <p class="touchOnly">Stânga: joystick. Dreapta: <b>PASĂ</b>, <b>ADÂNCIME</b> (pasă în fața coechipierului), <b>ȘUT</b> (ține apăsat pentru putere) și <b>SPRINT</b> (ține apăsat).<br>Când nu ai mingea: <b>SCHIMBĂ</b> jucătorul și <b>DEPOSEDARE</b>.</p>
@@ -194,7 +196,8 @@
 <div id="toast"></div>
 <div id="pauseBtn" class="hidden">⏸</div>
 <div id="teamBtn" class="hidden">👕</div>
-<div id="pause" class="hidden"><div><h1>Pauză</h1><div class="opts"><div class="opt" id="resume">▶ Continuă</div><div class="opt" id="teamOpen">👕 Echipa</div><div class="opt" id="quit">Meniu</div></div></div></div>
+<div id="camBtn" class="hidden">🎥</div>
+<div id="pause" class="hidden"><div><h1>Pauză</h1><div class="opts"><div class="opt" id="resume">▶ Continuă</div><div class="opt" id="teamOpen">👕 Echipa</div><div class="opt" id="camPause">🎥 Camera <span id="camLbl"></span></div><div class="opt" id="quit">Meniu</div></div></div></div>
 <div id="intro" class="hidden">
   <div class="in-logo">
     <img src="icon-512.png" alt="" class="in-icon">
