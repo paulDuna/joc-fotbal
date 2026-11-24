@@ -6,7 +6,7 @@ import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose }
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 33;
+const BUILD = 34;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -1449,6 +1449,10 @@ function syncGfx(dt) {
   if (pv) { camera.position.set(pv.side * (HALF_L - 20.5), 3.3, 0); camera.lookAt(pv.side * HALF_L, 1.0, 0); }   // penalty: vezi din spatele jucatorului, poarta in fata
   if (!!pv !== radarHidden) { radarHidden = !!pv; $('radar').classList.toggle('hidden', radarHidden); }        // radarul ar acoperi mingea
   else if (game.drill && game.drill.type === 'sprint') { const q = game.drill.p; camera.position.set(q.x - 2, 9 * CZ, q.z + 20 * CZ); camera.lookAt(q.x + 4, 0.8, q.z); }
+  if (game.state === 'iconshot') {                        // poza pentru iconita: mingea pe iarba, poarta si nocturnele in spate
+    ballGfx.mesh.position.set(HALF_L - 11, 0.16, 0); ballGfx.mesh.rotation.set(0.5, 0.9, 0.2); ballGfx.shadow.position.set(HALF_L - 11, 0.025, 0);
+    camera.position.set(HALF_L - 12.75, 0.42, 0.5); camera.lookAt(HALF_L - 10.6, 0.5, -0.1);
+  }
   if (game.state === 'intro') {                           // introducere: zbor lent in jurul stadionului
     const t = performance.now() / 1000, a = Math.sin(t * 0.13) * 0.85;   // leagan lent, mereu cu tribunele pline in fata
     camera.position.set(Math.sin(a) * 72, 20 + Math.sin(t * 0.35) * 6, Math.cos(a) * 52);
@@ -1823,6 +1827,11 @@ function endIntro() {
 if (![...new URLSearchParams(location.search).keys()].some((k) => k !== 'touch')) {   // la teste (?demo, ?sim...) sarim peste
   game.state = 'intro'; $('menu').classList.add('hidden'); $('intro').classList.remove('hidden'); document.body.classList.add('intro');
   $('intro').addEventListener('pointerdown', (e) => { e.preventDefault(); endIntro(); });
+}
+
+if (new URLSearchParams(location.search).has('iconshot')) {     // doar pentru a face iconita
+  world.setNight(true); game.state = 'iconshot'; document.body.classList.add('iconshot');
+  allPlayers.forEach((p) => { p.group.visible = p === squad[1][0]; });
 }
 
 // ---------- bucla principala ----------

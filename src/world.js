@@ -326,14 +326,38 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
 }
 
 // ---------- minge ----------
-export function makeBall(scene) {
-  const tex = canvasTex(128, 64, (g) => {
-    g.fillStyle = '#fff'; g.fillRect(0, 0, 128, 64); g.fillStyle = '#1a1a1a';
-    for (const [x, y] of [[16, 16], [48, 44], [80, 14], [112, 46], [64, 32], [0, 50], [128, 50], [32, 60], [96, 2]]) {
-      g.beginPath(); g.arc(x, y, 8, 0, Math.PI * 2); g.fill();
+// mingea clasica: 12 pentagoane negre si 20 de hexagoane albe, cu cusaturi (ca o minge adevarata)
+function ballTexture() {
+  const W = 1024, H = 512, f = (1 + Math.sqrt(5)) / 2, cyc = (a, b, c) => [[a, b, c], [c, a, b], [b, c, a]];
+  const pent = [], hex = [];
+  for (const s1 of [-1, 1]) for (const s2 of [-1, 1]) {
+    pent.push(...cyc(0, s1, s2 * f));                     // varfurile icosaedrului = centrele pentagoanelor
+    hex.push(...cyc(0, s1 * f, s2 / f));                  // centrele fetelor = centrele hexagoanelor
+  }
+  for (const a of [-1, 1]) for (const b of [-1, 1]) for (const c of [-1, 1]) hex.push([a, b, c]);
+  const norm = (v) => { const l = Math.hypot(...v); return v.map((x) => x / l); };
+  const C = [...pent.map((v) => [...norm(v), 1]), ...hex.map((v) => [...norm(v), 0])];
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d'), img = g.createImageData(W, H), d = img.data;
+  for (let r = 0; r < H; r++) {
+    const th = Math.PI * (r + 0.5) / H, st = Math.sin(th), y = Math.cos(th);
+    for (let c = 0; c < W; c++) {
+      const ph = 2 * Math.PI * (c + 0.5) / W, x = -Math.cos(ph) * st, z = Math.sin(ph) * st;
+      let b1 = -2, b2 = -2, k1 = 0;
+      for (const q of C) { const dot = q[0] * x + q[1] * y + q[2] * z; if (dot > b1) { b2 = b1; b1 = dot; k1 = q[3]; } else if (dot > b2) b2 = dot; }
+      let v = k1 ? 24 : 246;
+      if (b1 - b2 < 0.012) v = k1 ? 70 : 150;              // cusatura dintre petice
+      const i = (r * W + c) * 4; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
     }
-  });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.16, 20, 14), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5 }));
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+
+export function makeBall(scene) {
+  const tex = ballTexture();
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.16, 40, 28), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.38, metalness: 0.0 }));
   mesh.castShadow = true; scene.add(mesh);
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.2, 16), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.4, depthWrite: false }));
   shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.02; scene.add(shadow);
