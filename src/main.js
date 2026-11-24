@@ -6,7 +6,7 @@ import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose }
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 31;
+const BUILD = 32;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -1405,7 +1405,7 @@ function syncGfx(dt) {
         b.rUpLeg.rotation.x -= 1.4 * k; if (b.rLeg) b.rLeg.rotation.x += kt < 0.15 ? 0.6 : 0.05;
       }
       if (p.trickT > 0 && b.rLeg) { const tt = Math.sin(Math.PI * (1 - p.trickT / 0.45)); b.rLeg.rotation.x += 2.0 * tt; if (b.rUpLeg) b.rUpLeg.rotation.x += 0.5 * tt; }
-      if (((game.state === 'goal' && p === game.scorer) || ball.throwIn === p || (p.isGK && p.diveT > 0)) && b.lArm && b.rArm) { b.lArm.rotation.z -= 1.2; b.rArm.rotation.z += 1.2; }
+      if (game.state === 'goal' && p === game.scorer && sp < 2.5) r.position.y = Math.abs(Math.sin(performance.now() / 160)) * 0.4;   // bucurie: sare de fericire (fara brate "rupte")
       afterPose(p.man);
     }
   }
@@ -1891,6 +1891,20 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 window.__game = { game, ball, players, tick, log, humans, stats, keys, pressed, released };
+if (new URLSearchParams(location.search).has('auttest')) {     // test: autul echipei tale asteapta oricat, apoi il arunci tu
+  const res = [], dt = 1 / 60, T = (n) => { for (let i = 0; i < n; i++) tick(dt, 0); };
+  try {
+    startMatch(1); T(120);
+    ball.owner = null; ball.freeKick = null; ball.x = 10; ball.z = HALF_W + 1; ball.y = BALL_R; ball.vx = ball.vz = ball.vy = 0; ball.lastTouch = 1 - myTeam;
+    checkBounds(ball.x);
+    const who = ball.owner; res.push('aut pentru echipa ' + (who && who.team) + ' (eu=' + myTeam + ') arunca ' + (who && who.d.name));
+    T(1200);
+    res.push('dupa 20 s: owner=' + (ball.owner ? ball.owner.d.name + '/t' + ball.owner.team : 'nimeni') + ' throwIn=' + !!ball.throwIn + ' fk=' + !!ball.freeKick + ' state=' + game.state);
+    LOCAL.pressed.add('KeyF'); T(30);
+    res.push('dupa PASA: owner=' + (ball.owner ? ball.owner.d.name : 'nimeni (mingea e in aer)') + ' throwIn=' + !!ball.throwIn);
+  } catch (e) { res.push('ERR ' + e.stack); }
+  const pre = document.createElement('pre'); pre.id = 'simout'; pre.textContent = res.join(' | '); document.body.append(pre);
+}
 if (new URLSearchParams(location.search).has('traintest')) {   // test: cele trei antrenamente, cu taste apasate automat
   const res = [], dt = 1 / 60, T = (n) => { for (let i = 0; i < n; i++) tick(dt, 0); };
   const press = (code) => { LOCAL.keys.add(code); LOCAL.pressed.add(code); }, rel = (code) => { LOCAL.keys.delete(code); LOCAL.released.add(code); };

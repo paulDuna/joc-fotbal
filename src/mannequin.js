@@ -52,6 +52,10 @@ function kitMaterial(c) {
             p.x = lx + (p.x - lx) * m; p.z *= m;
           }
           if (p.y > 1.46 && ax < 0.09) { p.x *= 1.4; p.z *= 1.3; }        // gat gros
+          if (p.z > 0.0 && ax < 0.21 && wa < 0.5) {                        // piept si abdomen plate in fata (fara "sani")
+            if (p.y > 1.1 && p.y < 1.47) p.z *= 0.7;
+            else if (p.y > 0.95 && p.y <= 1.1) p.z *= 0.8;
+          }
           transformed = p;
         }`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vBind;\nuniform vec3 uShirt, uShorts, uSocks, uSkin, uBoot;')

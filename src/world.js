@@ -17,7 +17,7 @@ function pitchTexture() {
     const N = 18;
     for (let i = 0; i < N; i++) {
       const x0 = i * W / N, gr = g.createLinearGradient(x0, 0, x0 + W / N, 0);
-      const c = i % 2 ? ['#2f7a2c', '#337f2f'] : ['#3f8f39', '#43933c'];
+      const c = i % 2 ? ['#1d5a20', '#205f23'] : ['#27682a', '#2a6c2d'];        // verde inchis, ca pe stadioanele mari
       gr.addColorStop(0, c[0]); gr.addColorStop(0.5, c[1]); gr.addColorStop(1, c[0]);
       g.fillStyle = gr; g.fillRect(x0, 0, W / N + 1, H);
     }
@@ -32,8 +32,8 @@ function pitchTexture() {
       gr.addColorStop(0, 'rgba(125,115,60,' + a + ')'); gr.addColorStop(1, 'rgba(125,115,60,0)');
       g.fillStyle = gr; g.fillRect(X(x) - rx * S, Z(z) - rx * S, rx * 2 * S, rx * 2 * S);
     };
-    wear(-50, 0, 6, 0.35); wear(50, 0, 6, 0.35); wear(-41.5, 0, 3, 0.25); wear(41.5, 0, 3, 0.25); wear(0, 0, 10, 0.12);
-    g.strokeStyle = 'rgba(255,255,255,0.92)'; g.fillStyle = 'rgba(255,255,255,0.92)'; g.lineWidth = 3;
+    wear(-50, 0, 5, 0.18); wear(50, 0, 5, 0.18); wear(-41.5, 0, 2.5, 0.12); wear(41.5, 0, 2.5, 0.12);   // putin uzat doar in fata portilor
+    g.strokeStyle = '#ffffff'; g.fillStyle = '#ffffff'; g.lineWidth = 4;                 // linii albe, clare
     g.strokeRect(2, 2, W - 4, H - 4);
     g.beginPath(); g.moveTo(X(0), 0); g.lineTo(X(0), H); g.stroke();
     g.beginPath(); g.arc(X(0), Z(0), 9.15 * S, 0, Math.PI * 2); g.stroke();
