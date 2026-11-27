@@ -7,7 +7,7 @@ import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose, 
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 41;
+const BUILD = 42;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -1243,10 +1243,7 @@ function endMatch() {
   let prize = '';
   if (game.mode === 1 && !net.role && humans.length && humans[0].team === 0) {   // victorie contra calculatorului: o numaram pentru deblocari
     const won = pens ? pens[0] > pens[1] : a > b;
-    const draw = pens ? false : a === b, reward = won ? [300, 800, 1200][game.diff] : draw ? 200 : 50;
-    addGems(reward, won ? 'victorie vs AI' : draw ? 'egal vs AI' : 'ai jucat meciul');
-    prize = '\n💎 +' + reward + ' gemuri';
-    if (won && game.diff >= 1) { prize += recordWin(); prog.session.win = true; checkSession(); }
+    if (won && game.diff >= 1) { prize += recordWin(); prog.session.win = true; prog.session.hard = prog.session.hard || game.diff === 2; checkSession(); }
     else if (won) prize += '\n(Pe Ușor victoriile nu se numără la deblocări — joacă pe Normal)';
   }
   w += prize;
@@ -1996,24 +1993,31 @@ function addGems(n, why) {
   setTimeout(() => toast('💎 +' + n + ' gemuri · ' + why, 3.2), 600);
 }
 // provocarile Versus AI: fiecare antrenament are o tinta; toate + o victorie = bonus
+// recompensa: doar cand faci TOATE 4 provocarile + castigi meciul (Normal/Greu): 500 💎, +500 bonus pe Greu; de maxim 2 ori pe zi
 const CHALLENGES = {
-  sprint: { label: '🏃 Sprint', goal: 'sub 7,6 secunde', gems: 300 },
-  fk: { label: '🎯 Lovituri libere', goal: 'minim 2 goluri din 5', gems: 400 },
-  pen: { label: '⚽ Penalty-uri', goal: 'minim 3 goluri din 5', gems: 300 },
-  pass: { label: '👟 Pase', goal: 'minim 6 pase corecte în 30 s', gems: 300 },
+  sprint: { label: '🏃 Sprint', goal: 'sub 7,6 secunde' },
+  fk: { label: '🎯 Lovituri libere', goal: 'minim 2 goluri din 5' },
+  pen: { label: '⚽ Penalty-uri', goal: 'minim 3 goluri din 5' },
+  pass: { label: '👟 Pase', goal: 'minim 6 pase corecte în 30 s' },
 };
-const SESSION_BONUS = 1000;
+const SESSION_REWARD = 500, HARD_BONUS = 500, REWARDS_PER_DAY = 2;
+const today = () => new Date().toLocaleDateString('sv');
+function rewardsLeft() { if (!prog.daily || prog.daily.date !== today()) prog.daily = { date: today(), count: 0 }; return REWARDS_PER_DAY - prog.daily.count; }
 function completeChallenge(key, ok) {
   if (!ok) return '\n❌ Ținta: ' + CHALLENGES[key].goal + ' · mai încearcă!';
-  prog.session[key] = true; addGems(CHALLENGES[key].gems, CHALLENGES[key].label + ' reușit');
+  prog.session[key] = true;
   checkSession();
-  return '\n✅ Reușit! +' + CHALLENGES[key].gems + ' 💎';
+  return '\n✅ Provocare reușită!';
 }
 function checkSession() {
   const s = prog.session;
   if (Object.keys(CHALLENGES).every((k) => s[k]) && s.win) {
-    prog.session = {}; saveProg();
-    setTimeout(() => { addGems(SESSION_BONUS, 'toate provocările + victorie! 🏆'); sfx.goal(); }, 3000);
+    const hard = !!s.hard; prog.session = {};
+    if (rewardsLeft() > 0) {
+      prog.daily.count++; saveProg();
+      const n = SESSION_REWARD + (hard ? HARD_BONUS : 0);
+      setTimeout(() => { addGems(n, 'toate provocările + victorie' + (hard ? ' pe Greu (bonus!)' : '') + ' 🏆'); sfx.goal(); }, 3000);
+    } else { saveProg(); setTimeout(() => toast('Ai luat deja cele ' + REWARDS_PER_DAY + ' recompense de azi. Revino mâine! 🌙', 4), 3000); }
   } else saveProg();
 }
 
@@ -2023,11 +2027,12 @@ function renderHub() {
   for (const k in CHALLENGES) {
     const ch = CHALLENGES[k], el = $(ids[k]);
     el.classList.toggle('done', !!s[k]);
-    el.innerHTML = `<b>${ch.label} ${s[k] ? '✅' : ''}</b>${ch.goal} · <span class="rw">+${ch.gems} 💎</span>`;
+    el.innerHTML = `<b>${ch.label} ${s[k] ? '✅' : ''}</b>${ch.goal}`;
   }
   const n = Object.keys(CHALLENGES).filter((k) => s[k]).length + (s.win ? 1 : 0);
-  $('trSession').innerHTML = `Provocări: <b>${n} / 5</b> ${'✅'.repeat(n)}${'⬜'.repeat(5 - n)} · fă-le pe toate + câștigă meciul = <b style="color:#8fe9ff">+${SESSION_BONUS} 💎 bonus</b>`;
-  $('trWin').textContent = 'victorie: +' + [300, 800, 1200][game.diff] + ' 💎 (' + ['Ușor', 'Normal', 'Greu'][game.diff] + ')';
+  const left = rewardsLeft();
+  $('trSession').innerHTML = `Provocări: <b>${n} / 5</b> ${'✅'.repeat(n)}${'⬜'.repeat(5 - n)} · toate + victorie = <b style="color:#8fe9ff">${SESSION_REWARD} 💎</b> (pe Greu +${HARD_BONUS}) · recompense azi: <b>${REWARDS_PER_DAY - left}/${REWARDS_PER_DAY}</b>`;
+  $('trWin').textContent = game.diff >= 1 ? 'câștigă pe ' + ['Ușor', 'Normal', 'Greu'][game.diff] + (game.diff === 2 ? ' (bonus +' + HARD_BONUS + ' 💎)' : '') : 'pe Ușor nu se numără — alege Normal în Setări';
   updateGems();
 }
 
@@ -2231,6 +2236,18 @@ function frame(now) {
 requestAnimationFrame(frame);
 window.__game = { game, ball, players, tick, log, humans, stats, keys, pressed, released };
 if (new URLSearchParams(location.search).has('goalcard')) { showGoalCard(squad[0][8]); clearTimeout(goalCardT); }   // test: poza cu cardul de gol (ramane pe ecran)
+if (new URLSearchParams(location.search).has('rewardtest')) {  // test: 500 💎 doar pentru toate provocarile + victorie, de maxim 2 ori pe zi
+  const res = [];
+  try {
+    const saved = JSON.stringify(prog); prog = { wins: {}, total: 0, packs: [], gems: 0, session: {} };
+    const round = (diff) => { for (const k of Object.keys(CHALLENGES)) completeChallenge(k, true); game.diff = diff; startMatch(1); game.score = [1, 0]; endMatch(); };
+    startMatch(1); game.diff = 1; game.score = [2, 0]; endMatch(); res.push('doar meci castigat: gemuri=' + prog.gems);
+    round(1); res.push('runda 1 (Normal): gemuri=' + prog.gems + ' azi=' + prog.daily.count);
+    round(2); res.push('runda 2 (Greu): gemuri=' + prog.gems + ' azi=' + prog.daily.count);
+    round(1); res.push('runda 3: azi=' + prog.daily.count + ' ramase=' + rewardsLeft());
+    setTimeout(() => { res.push('gemuri primite in total: ' + prog.gems + ' (asteptat 500 + 1000 = 1500)'); prog = JSON.parse(saved); saveProg(); const pre = document.createElement('pre'); pre.id = 'simout'; pre.textContent = res.join(' | '); document.body.append(pre); }, 4500);
+  } catch (e) { res.push('ERR ' + e.stack); }
+}
 if (new URLSearchParams(location.search).has('unlocktest')) {  // test: 5 victorii pe Normal cu o echipa din Spania deblocheaza Atletico
   const res = [];
   try {
