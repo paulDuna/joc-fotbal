@@ -159,6 +159,8 @@
   .pk-club { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 14px; background: rgba(255,255,255,.07); border: 2px solid transparent; cursor: pointer; }
   .pk-club .badge { width: 40px; height: 40px; } .pk-club b { display: block; font-size: 15px; } .pk-club small { opacity: .75; }
   .pk-club.mine { border-color: #ffd34d; } .pk-club.opp { border-color: #ff5a36; }
+  .pk-club.locked { opacity: .55; filter: grayscale(.6); } .pk-club.locked.opp { opacity: .85; }
+  .pk-prog { font-size: 13px; opacity: .85; margin: 0 0 8px; }
   body.touch .pk-title { font-size: 16px; } body.touch .pk-side { min-width: 96px; padding: 4px 8px; font-size: 11px; } body.touch .pk-side span { font-size: 12px; }
   body.touch .pk-clubs { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } body.touch .pk-club { padding: 8px; } body.touch .pk-club .badge { width: 30px; height: 30px; }
   body:has(#home:not(.hidden)) #score, body:has(#home:not(.hidden)) #radar { visibility: hidden; }
@@ -229,7 +231,7 @@
   <div class="box">
     <h1>⚙️ Setări</h1>
     <div class="opts"><div class="opt" id="setBack">◀ Înapoi la echipă</div></div>
-    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 39</b></p>
+    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 40</b></p>
     <div class="opts menu-opts">
       <div class="opt" data-mode="1"><kbd class="keysOnly">1</kbd> <span class="keysOnly">Un jucător (contra calculatorului)</span><span class="touchOnly">▶ Joacă</span></div>
       <div class="opt keysOnly" data-mode="2"><kbd>2</kbd> Doi jucători</div>
@@ -295,6 +297,7 @@
     <div class="hm-btn pk-done" id="pkDone">✔ Gata</div>
   </div>
   <div class="pk-countries" id="pkCountries"></div>
+  <div class="pk-prog" id="pkProg"></div>
   <div class="pk-clubs" id="pkClubs"></div>
 </div>
 <div id="intro" class="hidden">
