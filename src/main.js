@@ -6,7 +6,7 @@ import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose, 
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 37;
+const BUILD = 38;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -669,6 +669,7 @@ function goal(team) {
   const sc = ball.lastPlayer;
   const who = sc ? (sc.team === team ? sc.d.name : 'autogol ' + sc.d.name) : '';
   showMsg('GOOOL!\n' + who, 3); sfx.goal();
+  if (sc && sc.team === team) showGoalCard(sc);           // cardul celui care a marcat
   goalFx(Math.sign(ball.x) || 1, ball.z, ball.y, Math.hypot(ball.vx, ball.vz), TEAMS[team].color);
   try { navigator.vibrate && navigator.vibrate(250); } catch (_) {}
   confetti(clamp(ball.x, -HALF_L + 4, HALF_L - 4), ball.z);
@@ -1854,7 +1855,9 @@ function clientTick(dt) {
       humans[0].ctrl = allPlayers[m.hc[1]] || humans[0].ctrl; humans[1].ctrl = allPlayers[m.hc[0]] || humans[1].ctrl;
       humans[0].charge = m.ch[1]; humans[1].charge = m.ch[0];
     }
-    game.scorer = m.gs >= 0 ? allPlayers[m.gs] : null;
+    const sc2 = m.gs >= 0 ? allPlayers[m.gs] : null;
+    if (sc2 && m.st === 'goal' && game.scorer !== sc2) showGoalCard(sc2);   // si la prieten, in jocul online
+    game.scorer = sc2;
   }
   // trimitem comenzile mele (tastatura / joystick / butoane) catre gazda
   net.pend.p.push(...LOCAL.pressed); net.pend.r.push(...LOCAL.released);
@@ -1922,6 +1925,15 @@ $('hmOnline').addEventListener('click', () => { initAudio(); showNetPanel(true);
 $('hm2p').addEventListener('click', () => { initAudio(); startMatch(2); });
 $('hmSet').addEventListener('click', () => { $('home').classList.add('hidden'); $('menu').classList.remove('hidden'); });
 $('setBack').addEventListener('click', () => showHome());
+// la gol: cardul marcatorului intra din dreapta, sta 3 secunde, apoi iese
+let goalCardT = 0;
+function showGoalCard(p) {
+  const el = $('goalCard');
+  el.innerHTML = '<div class="gc-t">⚽ GOOOL!</div>' + cardHTML(p.d, p.role, true);
+  el.classList.remove('hidden', 'out'); void el.offsetWidth;
+  clearTimeout(goalCardT);
+  goalCardT = setTimeout(() => { el.classList.add('out'); goalCardT = setTimeout(() => el.classList.add('hidden'), 520); }, 3200);
+}
 homeReady = true;
 
 // ---------- introducerea: camera zboara in jurul stadionului, apare logo-ul; o atingere te duce in meniu ----------
@@ -2026,6 +2038,7 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 window.__game = { game, ball, players, tick, log, humans, stats, keys, pressed, released };
+if (new URLSearchParams(location.search).has('goalcard')) { showGoalCard(squad[0][8]); clearTimeout(goalCardT); }   // test: poza cu cardul de gol (ramane pe ecran)
 if (new URLSearchParams(location.search).has('hometest')) {    // test: ecranul principal si butoanele lui
   const res = [], vis = (id) => !$(id).classList.contains('hidden');
   try {

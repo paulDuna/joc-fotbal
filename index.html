@@ -126,10 +126,17 @@
   .card .c-name { position: absolute; bottom: 7%; left: 3%; right: 3%; text-align: center; font-weight: 900; font-size: .52em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
   .card { font-size: clamp(14px, 1.9vw, 24px); }
   #hmCard { position: fixed; inset: 0; z-index: 35; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; }
-  #hmCard .card { position: relative; transform: none; width: min(260px, 38vh); font-size: min(64px, 9vh); }
-  #hmCard .c-stats { position: absolute; bottom: 17%; left: 8%; right: 8%; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: .26em; font-weight: 800; }
-  #hmCard .c-stats b { font-size: 1.15em; margin-right: 4px; }
-  #hmCard .c-name { font-size: .32em; bottom: 6%; } #hmCard .c-av { top: 8%; width: 44%; }
+  #goalCard { position: fixed; right: calc(5% + env(safe-area-inset-right)); top: 50%; z-index: 26; pointer-events: none; text-align: center; animation: gcIn .6s cubic-bezier(.2,1.4,.4,1) both; }
+  #goalCard.out { animation: gcOut .5s ease-in forwards; }
+  #goalCard .gc-t { font-size: 30px; font-weight: 900; color: #ffd34d; text-shadow: 0 3px 10px rgba(0,0,0,.8); margin-bottom: 6px; letter-spacing: 2px; }
+  @keyframes gcIn { from { transform: translate(140%, -50%) rotate(12deg); } to { transform: translate(0, -50%) rotate(0); } }
+  @keyframes gcOut { to { transform: translate(140%, -50%) rotate(12deg); opacity: 0; } }
+  #goalCard .card { box-shadow: 0 0 40px rgba(255,211,77,.7), 0 10px 30px rgba(0,0,0,.7); }
+  #hmCard .card, #goalCard .card { position: relative; transform: none; width: min(260px, 38vh); font-size: min(64px, 9vh); }
+  #goalCard .card { width: min(220px, 40vh); font-size: min(54px, 9.6vh); }
+  #hmCard .c-stats, #goalCard .c-stats { position: absolute; bottom: 17%; left: 8%; right: 8%; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: .26em; font-weight: 800; }
+  #hmCard .c-stats b, #goalCard .c-stats b { font-size: 1.15em; margin-right: 4px; }
+  #hmCard .c-name, #goalCard .c-name { font-size: .32em; bottom: 6%; } #hmCard .c-av, #goalCard .c-av { top: 8%; width: 44%; }
   body.touch .hm-logo { font-size: 18px; } body.touch .hm-side { width: 170px; gap: 7px; } body.touch .hm-play { font-size: 24px; padding: 14px 8px; }
   body.touch .hm-btn { font-size: 14px; padding: 8px; } body.touch .hm-ovr { font-size: 12px; }
   #menu .menu-opts { display: none; }
@@ -201,7 +208,7 @@
   <div class="box">
     <h1>⚙️ Setări</h1>
     <div class="opts"><div class="opt" id="setBack">◀ Înapoi la echipă</div></div>
-    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 37</b></p>
+    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 38</b></p>
     <div class="opts menu-opts">
       <div class="opt" data-mode="1"><kbd class="keysOnly">1</kbd> <span class="keysOnly">Un jucător (contra calculatorului)</span><span class="touchOnly">▶ Joacă</span></div>
       <div class="opt keysOnly" data-mode="2"><kbd>2</kbd> Doi jucători</div>
@@ -258,6 +265,7 @@
   </div>
   <div id="hmCard" class="hidden"></div>
 </div>
+<div id="goalCard" class="hidden"></div>
 <div id="intro" class="hidden">
   <div class="in-logo">
     <img src="icon-512.png" alt="" class="in-icon">
