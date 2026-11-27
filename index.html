@@ -93,6 +93,19 @@
   body.touch #teamBtn { top: 6px; right: calc(52px + env(safe-area-inset-right)); width: 36px; height: 36px; }
   #camBtn { position: fixed; top: 12px; right: calc(108px + env(safe-area-inset-right)); width: 40px; height: 40px; border-radius: 50%; background: rgba(12,18,28,.8); display: flex; align-items: center; justify-content: center; font-size: 19px; cursor: pointer; }
   body.touch #camBtn { top: 6px; right: calc(96px + env(safe-area-inset-right)); width: 36px; height: 36px; }
+  /* ---- biluțe albastre si imbunatatiri ---- */
+  .orb { display: inline-block; width: 1em; height: 1em; border-radius: 50%; vertical-align: -0.15em;
+    background: radial-gradient(circle at 35% 30%, #ffffff 0 12%, #8fe9ff 22%, #2a8cff 55%, #0b2f8a 100%); box-shadow: 0 0 8px rgba(80,180,255,.9); }
+  .hm-orbs { color: #9fd0ff; border-color: rgba(80,160,255,.5); background: rgba(40,120,255,.14); }
+  .card .c-lvl { position: absolute; right: 6%; bottom: 20%; font-size: .42em; font-weight: 900; color: #fff; background: #2a8cff; border-radius: 6px; padding: 0 .25em; box-shadow: 0 0 6px rgba(80,180,255,.9); z-index: 1; }
+  .up-wrap { display: flex; gap: 22px; align-items: center; }
+  .up-side { display: flex; flex-direction: column; gap: 10px; align-items: center; min-width: 190px; text-align: center; }
+  .up-side > b { font-size: 24px; }
+  .up-pips { display: flex; gap: 5px; } .up-pips i { width: 22px; height: 10px; border-radius: 4px; background: rgba(255,255,255,.2); } .up-pips i.on { background: #2a8cff; box-shadow: 0 0 8px #2a8cff; }
+  .up-btn { cursor: pointer; padding: 12px 20px; border-radius: 14px; font-weight: 900; font-size: 18px; color: #fff; background: linear-gradient(180deg, #4fb0ff, #1f5fd6); box-shadow: 0 5px 0 #133f8e, 0 8px 22px rgba(42,140,255,.5); }
+  .up-btn small { font-size: 13px; font-weight: 700; } .up-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #133f8e; }
+  .up-max { font-weight: 900; color: #ffd34d; font-size: 18px; } .up-hint { opacity: .75; } .up-close { position: absolute; bottom: 5%; width: 100%; text-align: center; opacity: .75; }
+  body.touch .up-side { min-width: 150px; gap: 6px; } body.touch .up-side > b { font-size: 18px; } body.touch .up-btn { font-size: 15px; padding: 8px 14px; }
   /* ---- gemuri, Versus AI, pachete ---- */
   .hm-gems { font-weight: 900; font-size: 16px; color: #8fe9ff; background: rgba(74,227,255,.12); border: 1px solid rgba(74,227,255,.4); padding: 5px 12px; border-radius: 14px; cursor: pointer; }
   .hm-packs { border-color: #c77dff; background: rgba(199,125,255,.15); }
@@ -264,7 +277,7 @@
   <div class="box">
     <h1>⚙️ Setări</h1>
     <div class="opts"><div class="opt" id="setBack">◀ Înapoi la echipă</div></div>
-    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 42</b></p>
+    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 43</b></p>
     <div class="opts menu-opts">
       <div class="opt" data-mode="1"><kbd class="keysOnly">1</kbd> <span class="keysOnly">Un jucător (contra calculatorului)</span><span class="touchOnly">▶ Joacă</span></div>
       <div class="opt keysOnly" data-mode="2"><kbd>2</kbd> Doi jucători</div>
@@ -309,6 +322,7 @@
     <div class="hm-match" id="hmMatch"><span class="hm-club" id="hmMine"></span><b>VS</b><span class="hm-club" id="hmOpp"></span></div>
     <div class="hm-ovr" id="hmOvr"></div>
     <div class="hm-gems gems" id="hmGems"></div>
+    <div class="hm-gems hm-orbs orbs" id="hmOrbs"></div>
   </div>
   <div class="hm-body">
     <div class="hm-pitch" id="hmPitch"></div>
@@ -349,7 +363,7 @@
   <div class="in-tap">Atinge ecranul pentru a începe</div>
 </div>
 <div id="trainPanel" class="hidden"><div class="box">
-  <h1>🤖 Versus AI <span class="gems tr-gems"></span></h1>
+  <h1>🤖 Versus AI <span class="gems tr-gems"></span> <span class="orbs tr-gems"></span></h1>
   <p id="trResult"></p>
   <div class="tr-list">
     <div class="tr-ch" id="trSprint"></div><div class="tr-ch" id="trFk"></div><div class="tr-ch" id="trPen"></div><div class="tr-ch" id="trPass"></div>

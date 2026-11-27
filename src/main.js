@@ -7,7 +7,7 @@ import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose, 
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 42;
+const BUILD = 43;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -1243,7 +1243,7 @@ function endMatch() {
   let prize = '';
   if (game.mode === 1 && !net.role && humans.length && humans[0].team === 0) {   // victorie contra calculatorului: o numaram pentru deblocari
     const won = pens ? pens[0] > pens[1] : a > b;
-    if (won && game.diff >= 1) { prize += recordWin(); prog.session.win = true; prog.session.hard = prog.session.hard || game.diff === 2; checkSession(); }
+    if (won && game.diff >= 1) { prize += addOrbs(ORB_WIN[game.diff], 'match', 'victorie vs AI') ? '\n🔵 +' + ORB_WIN[game.diff] + ' biluțe' : ''; prize += recordWin(); prog.session.win = true; prog.session.hard = prog.session.hard || game.diff === 2; checkSession(); }
     else if (won) prize += '\n(Pe Ușor victoriile nu se numără la deblocări — joacă pe Normal)';
   }
   w += prize;
@@ -1912,7 +1912,7 @@ const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 function cardHTML(d, role, big) {
   const o = cardOvr(d, role), skin = hex(SKIN[d.t] ?? SKIN[0]), hair = d.s === 'bald' ? 'transparent' : hex(d.h ?? 0x18120e);
   const stats = big ? `<div class="c-stats"><span><b>${d.spd}</b>VIT</span><span><b>${d.dri}</b>DRI</span><span><b>${d.sho}</b>ȘUT</span><span><b>${d.def}</b>${role === 'G' ? 'REF' : 'DEF'}</span><span><b>${d.pas}</b>PAS</span><span><b>${Math.round((d.spd + d.def) / 2)}</b>FIZ</span></div>` : '';
-  return `<div class="card ${cardTier(o)}"><span class="c-ovr">${o}</span><span class="c-pos">${POS_RO[role]}</span><span class="c-av" style="background:${skin}"><i style="background:${hair}"></i></span>${stats}<span class="c-name">${d.name}</span></div>`;
+  return `<div class="card ${cardTier(o)}">${d.lvl ? `<span class="c-lvl">⬆${d.lvl}</span>` : ''}<span class="c-ovr">${o}</span><span class="c-pos">${POS_RO[role]}</span><span class="c-av" style="background:${skin}"><i style="background:${hair}"></i></span>${stats}<span class="c-name">${d.name}</span></div>`;
 }
 function renderHome() {
   const team = squad[myTeam], pitch = $('hmPitch'); let sum = 0;
@@ -1925,15 +1925,25 @@ function renderHome() {
 }
 function showHome() {
   game.state = 'menu'; $('menu').classList.add('hidden'); $('hmCard').classList.add('hidden');
-  renderHome(); $('home').classList.remove('hidden');
+  renderHome(); updateGems(); $('home').classList.remove('hidden');
+}
+function showCardBig(i) {                                 // cardul mare, cu nivel si butonul de imbunatatire
+  const p = squad[myTeam][i], d = p.d, lv = d.lvl || 0, max = lv >= UPG_COST.length;
+  const pips = UPG_COST.map((_, k) => `<i class="${k < lv ? 'on' : ''}"></i>`).join('');
+  $('hmCard').innerHTML = `<div class="up-wrap">${cardHTML(d, p.role, true)}<div class="up-side"><b>${d.name}</b><div class="up-pips">${pips}</div><span>Nivel ${lv} / ${UPG_COST.length}</span>
+    ${max ? '<div class="up-max">⭐ Nivel maxim</div>' : `<div class="up-btn" data-i="${i}">⬆ Îmbunătățește<br><small><i class="orb"></i> ${UPG_COST[lv]} · ai ${prog.orbs}</small></div>`}
+    <small class="up-hint">Fiecare nivel: +${UPG_STEP} la toate statisticile</small></div></div><p class="up-close">Atinge în afară ca să închizi</p>`;
+  $('hmCard').classList.remove('hidden');
 }
 $('hmPitch').addEventListener('click', (e) => {          // atingi un card: il vezi mare, cu toate statisticile
   const el = e.target.closest('.card'); if (!el) return;
-  const p = squad[myTeam][+el.dataset.i];
-  $('hmCard').innerHTML = cardHTML(p.d, p.role, true) + '<p style="position:absolute;bottom:6%;width:100%;text-align:center;opacity:.8">Atinge ca să închizi</p>';
-  $('hmCard').classList.remove('hidden');
+  showCardBig(+el.dataset.i);
 });
-$('hmCard').addEventListener('click', () => $('hmCard').classList.add('hidden'));
+$('hmCard').addEventListener('click', (e) => {
+  const b = e.target.closest('.up-btn'); if (b) { upgradePlayer(+b.dataset.i); return; }
+  if (e.target.closest('.up-side') || e.target.closest('.card')) return;
+  $('hmCard').classList.add('hidden');
+});
 $('hmPlay').addEventListener('click', () => { initAudio(); goFullscreen(); openTrain(); });   // Versus AI: provocari + meci
 $('hmPacks').addEventListener('click', () => openPacks());
 $('hmGems').addEventListener('click', () => openPacks());
@@ -1987,7 +1997,10 @@ function recordWin() {                                    // apelat la victorie:
   return nextLocked && !isLegends(f.country) ? '\n🏆 Încă ' + winsNeeded(nextLocked.id) + ' victorii pentru ' + nextLocked.name : '\n🏆 Victorie numărată!';
 }
 // gemuri
-function updateGems() { document.querySelectorAll('.gems').forEach((el) => { el.textContent = '💎 ' + prog.gems.toLocaleString('ro-RO'); }); }
+function updateGems() {
+  document.querySelectorAll('.gems').forEach((el) => { el.textContent = '💎 ' + prog.gems.toLocaleString('ro-RO'); });
+  document.querySelectorAll('.orbs').forEach((el) => { el.innerHTML = '<i class="orb"></i> ' + (prog.orbs || 0).toLocaleString('ro-RO'); });
+}
 function addGems(n, why) {
   prog.gems += n; saveProg(); updateGems();
   setTimeout(() => toast('💎 +' + n + ' gemuri · ' + why, 3.2), 600);
@@ -2006,8 +2019,9 @@ function rewardsLeft() { if (!prog.daily || prog.daily.date !== today()) prog.da
 function completeChallenge(key, ok) {
   if (!ok) return '\n❌ Ținta: ' + CHALLENGES[key].goal + ' · mai încearcă!';
   prog.session[key] = true;
+  const o = addOrbs(ORB_REWARD, key, CHALLENGES[key].label + ' reușit');
   checkSession();
-  return '\n✅ Provocare reușită!';
+  return '\n✅ Provocare reușită!' + o;
 }
 function checkSession() {
   const s = prog.session;
@@ -2021,13 +2035,42 @@ function checkSession() {
   } else saveProg();
 }
 
+// ---------- biluțe albastre 🔵 si imbunatatirea jucatorilor (6 niveluri, +2 la toate statisticile pe nivel) ----------
+const UPG_COST = [100, 200, 300, 400, 500, 600], UPG_STEP = 2, ORB_REWARD = 25, ORB_WIN = [0, 50, 80], ORB_PER_DAY = 2;
+prog.orbs = prog.orbs || 0; prog.upg = prog.upg || {};
+const upgKey = (clubId, d) => clubId + ':' + d.name;
+function orbDayLeft(kind) { if (!prog.orbDay || prog.orbDay.date !== today()) prog.orbDay = { date: today() }; return ORB_PER_DAY - (prog.orbDay[kind] || 0); }
+function addOrbs(n, kind, why) {                          // de maxim 2 ori pe zi pentru fiecare provocare / pentru meci
+  if (orbDayLeft(kind) <= 0) return '';
+  prog.orbDay[kind] = (prog.orbDay[kind] || 0) + 1; prog.orbs += n; saveProg(); updateGems();
+  setTimeout(() => toast('🔵 +' + n + ' biluțe · ' + why, 3), 1400);
+  return ' +' + n + ' 🔵';
+}
+function applyUpgrades(team) {                            // pune nivelurile salvate peste statisticile jucatorilor
+  for (const d of [...team.players, ...team.bench]) {
+    const lv = prog.upg[upgKey(team.id, d)] || 0; d.lvl = lv;
+    if (lv) for (const s of ['spd', 'sho', 'pas', 'dri', 'def']) d[s] = Math.min(99, d[s] + lv * UPG_STEP);
+  }
+  return team;
+}
+function upgradePlayer(i) {
+  const team = TEAMS[0], d = team.players[i], key = upgKey(team.id, d), lv = prog.upg[key] || 0;
+  if (lv >= UPG_COST.length) return toast('Jucătorul e deja la nivelul maxim ⭐', 2);
+  const cost = UPG_COST[lv];
+  if (prog.orbs < cost) return toast('Îți mai trebuie ' + (cost - prog.orbs) + ' 🔵 · câștigă-le la Versus AI!', 3);
+  prog.orbs -= cost; prog.upg[key] = lv + 1; saveProg(); updateGems();
+  applyClubs(clubIds); sfx.goal();
+  toast('⬆ ' + d.name + ' a ajuns la nivelul ' + (lv + 1) + '! +' + UPG_STEP + ' la toate', 3);
+  showCardBig(i);
+}
+
 // ecranul Versus AI: provocarile (cu tinta si gemuri) si meciul
 function renderHub() {
   const s = prog.session, ids = { sprint: 'trSprint', fk: 'trFk', pen: 'trPen', pass: 'trPass' };
   for (const k in CHALLENGES) {
     const ch = CHALLENGES[k], el = $(ids[k]);
     el.classList.toggle('done', !!s[k]);
-    el.innerHTML = `<b>${ch.label} ${s[k] ? '✅' : ''}</b>${ch.goal}`;
+    el.innerHTML = `<b>${ch.label} ${s[k] ? '✅' : ''}</b>${ch.goal} · <span class="rw">+${ORB_REWARD} <i class="orb"></i> (azi ${ORB_PER_DAY - orbDayLeft(k)}/${ORB_PER_DAY})</span>`;
   }
   const n = Object.keys(CHALLENGES).filter((k) => s[k]).length + (s.win ? 1 : 0);
   const left = rewardsLeft();
@@ -2086,7 +2129,7 @@ try { const s = JSON.parse(localStorage.getItem('fotbal_clubs') || 'null'); if (
 const badgeCss = (t) => `background:linear-gradient(135deg, ${hex(t.color)} 0 55%, ${hex(t.shorts)} 55% 100%)`;
 function applyClubs(ids) {
   const a = findClub(ids[0]) || findClub('rma'), b = findClub(ids[1]) || findClub('fcb');
-  const t0 = buildTeam(a.club), t1 = buildTeam(b.club, t0.color);   // daca tricourile seamana, adversarul joaca in echipamentul de deplasare
+  const t0 = applyUpgrades(buildTeam(a.club)), t1 = buildTeam(b.club, t0.color);   // jucatorii tai au nivelurile lor   // daca tricourile seamana, adversarul joaca in echipamentul de deplasare
   TEAMS[0] = t0; TEAMS[1] = t1; clubIds = [a.club.id, b.club.id];
   myTeam = 0;                                             // tu esti mereu prima echipa aleasa
   for (let t = 0; t < 2; t++) squad[t].forEach((p, i) => { substitute(p, TEAMS[t].players[i]); origD[allPlayers.indexOf(p)] = TEAMS[t].players[i]; });
@@ -2236,6 +2279,23 @@ function frame(now) {
 requestAnimationFrame(frame);
 window.__game = { game, ball, players, tick, log, humans, stats, keys, pressed, released };
 if (new URLSearchParams(location.search).has('goalcard')) { showGoalCard(squad[0][8]); clearTimeout(goalCardT); }   // test: poza cu cardul de gol (ramane pe ecran)
+if (new URLSearchParams(location.search).has('upgtest')) {     // test: biluțe castigate si 6 imbunatatiri
+  const res = [];
+  try {
+    const saved = JSON.stringify(prog); prog = Object.assign(JSON.parse(saved), { orbs: 0, upg: {}, orbDay: null, session: {} });
+    for (let r = 0; r < 3; r++) completeChallenge('sprint', true);
+    res.push('3x sprint reusit: orbs=' + prog.orbs + ' (max 2/zi = 50)');
+    startMatch(1); game.diff = 2; game.score = [1, 0]; endMatch(); res.push('victorie pe Greu: orbs=' + prog.orbs);
+    applyClubs(['rma', 'fcb']); showHome(); const d0 = squad[0][9].d, o0 = cardOvr(d0, 'A');
+    prog.orbs = 2100; showCardBig(9);
+    for (let k = 0; k < 7; k++) { const b = $('hmCard').querySelector('.up-btn'); if (b) b.click(); }
+    const d1 = squad[0][9].d;
+    res.push(d1.name + ': nivel ' + d1.lvl + ' nota ' + o0 + '->' + cardOvr(d1, 'A') + ' viteza ' + d0.spd + '->' + d1.spd + ' orbs ramase=' + prog.orbs + ' max=' + !!$('hmCard').querySelector('.up-max'));
+    if (!new URLSearchParams(location.search).has('keep')) { prog = JSON.parse(saved); saveProg(); applyClubs(clubIds); }
+  } catch (e) { res.push('ERR ' + e.stack); }
+  const pre = document.createElement('pre'); pre.id = 'simout'; pre.textContent = res.join(' | '); document.body.append(pre);
+}
+if (new URLSearchParams(location.search).has('upgshot')) { prog.orbs = 450; prog.upg['rma:Mbappé'] = 2; applyClubs(clubIds); showHome(); showCardBig(9); }
 if (new URLSearchParams(location.search).has('rewardtest')) {  // test: 500 💎 doar pentru toate provocarile + victorie, de maxim 2 ori pe zi
   const res = [];
   try {
