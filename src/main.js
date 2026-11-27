@@ -7,7 +7,7 @@ import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose, 
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 40;
+const BUILD = 41;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -1243,8 +1243,11 @@ function endMatch() {
   let prize = '';
   if (game.mode === 1 && !net.role && humans.length && humans[0].team === 0) {   // victorie contra calculatorului: o numaram pentru deblocari
     const won = pens ? pens[0] > pens[1] : a > b;
-    if (won && game.diff >= 1) prize = recordWin();
-    else if (won) prize = '\n(Pe Ușor victoriile nu se numără la deblocări — joacă pe Normal)';
+    const draw = pens ? false : a === b, reward = won ? [300, 800, 1200][game.diff] : draw ? 200 : 50;
+    addGems(reward, won ? 'victorie vs AI' : draw ? 'egal vs AI' : 'ai jucat meciul');
+    prize = '\n💎 +' + reward + ' gemuri';
+    if (won && game.diff >= 1) { prize += recordWin(); prog.session.win = true; checkSession(); }
+    else if (won) prize += '\n(Pe Ușor victoriile nu se numără la deblocări — joacă pe Normal)';
   }
   w += prize;
   showMsg('Final: ' + a + ' - ' + b + extra + '\n' + w + '\n' + statLine() + (isTouch ? '\nAtinge ecranul = meniu' : '\nEnter = meniu'), 1e9);
@@ -1549,6 +1552,7 @@ function openTrain(result) {
   players.length = 0; players.push(...allPlayers); allPlayers.forEach((p) => { p.group.visible = true; });
   $('menu').classList.add('hidden'); $('home').classList.add('hidden'); $('touch').classList.add('hidden'); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden'); $('camBtn').classList.add('hidden');
   $('p1').classList.add('hidden'); MARKERS.forEach((m) => m.setVisible(false));
+  renderHub();
   const b = TRAIN_BEST;
   $('trBest').innerHTML = 'Recorduri: 🏃 ' + (b.sprint ? b.sprint.toFixed(2) + ' s' : '–') + ' · 🎯 ' + (b.fk ?? '–') + '/5 · ⚽ ' + (b.pen ?? '–') + '/5 · 👟 pase ' + (b.pass ? b.pass.toFixed(1) + ' s' : '–');
   $('trResult').textContent = result || '';
@@ -1614,7 +1618,7 @@ function startPassDrill() {
   setOwner(mates[0]); ball.protectT = 0;
   passNewTarget();
   game.state = 'play'; game.freeze = 1.5;
-  showMsg('👟 Pase\nDă pasa colegului marcat cu galben!', 2.4);
+  showMsg('👟 Pase · 30 de secunde\nDă pase colegului marcat cu galben!', 2.4);
   toast(isTouch ? 'Joystick spre coleg + PASĂ' : 'Direcția spre coleg (W A S D) + PASĂ (F)', 4);
   MARKERS[1].setVisible(true);
 }
@@ -1628,6 +1632,11 @@ function passWatch(dt) {
   if (d.phase === 'ready') { d.phase = 'run'; d.t = 0; }
   if (d.phase !== 'run') return;
   d.t += dt;
+  if (d.t >= 30) {                                        // timpul s-a terminat
+    showMsg('⏱ Timpul a expirat!\n' + d.score + ' pase corecte', 2.4);
+    d.final = d.t; d.t = 0; d.phase = 'done'; game.state = 'train'; MARKERS[1].setVisible(false);
+    return;
+  }
   if (ball.owner && ball.owner === d.target) {           // pasa a ajuns la cine trebuia
     d.score++; sfx.kick(0.25);
     if (d.score >= d.total) {
@@ -1709,11 +1718,11 @@ function drillStep(dt) {
 function endDrill() {
   const d = game.drill;
   let res;
-  if (d.type === 'sprint') res = '🏃 Sprint: cel mai bun timp ' + (d.best ? d.best.toFixed(2) + ' s' : '–');
-  else if (d.type === 'pass') res = d.done ? '👟 Pase: 10 pase în ' + d.final.toFixed(1) + ' secunde' + (d.rec ? ' · 🏆 Record nou!' : '') : '👟 Pase: ' + d.score + ' din 10';
+  if (d.type === 'sprint') res = '🏃 Sprint: cel mai bun timp ' + (d.best ? d.best.toFixed(2) + ' s' : '–') + completeChallenge('sprint', d.best && d.best <= 7.6);
+  else if (d.type === 'pass') res = (d.done ? '👟 Pase: 10 pase în ' + d.final.toFixed(1) + ' secunde' + (d.rec ? ' · 🏆 Record nou!' : '') : '👟 Pase: ' + d.score + ' pase corecte') + completeChallenge('pass', d.score >= 6);
   else {
     const key = d.type; if (TRAIN_BEST[key] == null || d.score > TRAIN_BEST[key]) { TRAIN_BEST[key] = d.score; saveBest(); }
-    res = (d.type === 'fk' ? '🎯 Lovituri libere: ' : '⚽ Penalty-uri: ') + d.score + ' goluri din ' + d.total;
+    res = (d.type === 'fk' ? '🎯 Lovituri libere: ' : '⚽ Penalty-uri: ') + d.score + ' goluri din ' + d.total + completeChallenge(d.type, d.type === 'fk' ? d.score >= 2 : d.score >= 3);
   }
   openTrain(res);
 }
@@ -1928,8 +1937,9 @@ $('hmPitch').addEventListener('click', (e) => {          // atingi un card: il v
   $('hmCard').classList.remove('hidden');
 });
 $('hmCard').addEventListener('click', () => $('hmCard').classList.add('hidden'));
-$('hmPlay').addEventListener('click', () => { initAudio(); goFullscreen(); startMatch(1); });
-$('hmTrain').addEventListener('click', () => { initAudio(); goFullscreen(); openTrain(); });
+$('hmPlay').addEventListener('click', () => { initAudio(); goFullscreen(); openTrain(); });   // Versus AI: provocari + meci
+$('hmPacks').addEventListener('click', () => openPacks());
+$('hmGems').addEventListener('click', () => openPacks());
 $('hmOnline').addEventListener('click', () => { initAudio(); showNetPanel(true); });
 $('hm2p').addEventListener('click', () => { initAudio(); startMatch(2); });
 $('hmSet').addEventListener('click', () => { $('home').classList.add('hidden'); $('menu').classList.remove('hidden'); });
@@ -1945,34 +1955,125 @@ function showGoalCard(p) {
 }
 
 // ---------- deblocarea echipelor: 5 victorii pe Normal/Greu cu o echipa dintr-o tara = urmatoarea echipa din tara ----------
-const WINS_PER_UNLOCK = 5, WINS_PER_LEGEND = 10;
-let prog = { wins: {}, total: 0 };
-try { const s = JSON.parse(localStorage.getItem('fotbal_prog') || 'null'); if (s && s.wins) prog = s; } catch (_) {}
+// + gemuri 💎 (din provocari si meciuri vs AI) cu care cumperi pachete care deblocheaza echipe
+const WINS_PER_UNLOCK = 5, WINS_PER_LEGEND = 10, PACK_PRICE = 4000, LEGEND_PACK_PRICE = 8000;
+let prog = { wins: {}, total: 0, packs: [], gems: 500, session: {} };
+try { const s = JSON.parse(localStorage.getItem('fotbal_prog') || 'null'); if (s && s.wins) prog = Object.assign(prog, s); } catch (_) {}
+prog.packs = prog.packs || []; prog.session = prog.session || {}; if (typeof prog.gems !== 'number') prog.gems = 500;
 const saveProg = () => { try { localStorage.setItem('fotbal_prog', JSON.stringify(prog)); } catch (_) {} };
 const isLegends = (c) => c.id === 'leg';
 const baseUnlocked = (c) => (isLegends(c) ? 0 : Math.min(3, c.clubs.length));   // la inceput: primele 3 echipe din fiecare tara
-function unlockedCount(c) {
-  if (isLegends(c)) return Math.min(c.clubs.length, Math.floor(prog.total / WINS_PER_LEGEND));
-  return Math.min(c.clubs.length, baseUnlocked(c) + Math.floor((prog.wins[c.id] || 0) / WINS_PER_UNLOCK));
+// pentru o tara: care echipe sunt deblocate (din victorii, in ordine, sau din pachete) si cate victorii mai trebuie
+function lockInfo(c) {
+  const fromWins = isLegends(c) ? Math.floor(prog.total / WINS_PER_LEGEND) : baseUnlocked(c) + Math.floor((prog.wins[c.id] || 0) / WINS_PER_UNLOCK);
+  const info = {}; let rank = 0;
+  for (const k of c.clubs) {
+    if (prog.packs.includes(k.id)) { info[k.id] = { open: true }; continue; }
+    const open = rank < fromWins;
+    let need = 0;
+    if (!open) need = isLegends(c) ? (rank + 1) * WINS_PER_LEGEND - prog.total : (rank - baseUnlocked(c) + 1) * WINS_PER_UNLOCK - (prog.wins[c.id] || 0);
+    info[k.id] = { open, need }; rank++;
+  }
+  return info;
 }
-function isUnlocked(id) { const f = findClub(id); return !!f && f.country.clubs.indexOf(f.club) < unlockedCount(f.country); }
-function winsNeeded(id) {                                // cate victorii mai trebuie pentru clubul blocat
-  const f = findClub(id), j = f.country.clubs.indexOf(f.club);
-  if (isLegends(f.country)) return (j + 1) * WINS_PER_LEGEND - prog.total;
-  return (j - baseUnlocked(f.country) + 1) * WINS_PER_UNLOCK - (prog.wins[f.country.id] || 0);
-}
+function isUnlocked(id) { const f = findClub(id); return !!f && lockInfo(f.country)[id].open; }
+function winsNeeded(id) { const f = findClub(id); return f ? lockInfo(f.country)[id].need : 0; }
+const lockedIn = (c) => c.clubs.filter((k) => !isUnlocked(k.id));
 function recordWin() {                                    // apelat la victorie: numara si spune ce s-a deblocat
   const f = findClub(clubIds[0]); if (!f) return '';
-  const leg = COUNTRIES.find(isLegends), b1 = unlockedCount(f.country), b2 = unlockedCount(leg);
+  const leg = COUNTRIES.find(isLegends), before = new Set([...f.country.clubs, ...leg.clubs].filter((k) => isUnlocked(k.id)).map((k) => k.id));
   if (!isLegends(f.country)) prog.wins[f.country.id] = (prog.wins[f.country.id] || 0) + 1;
   prog.total++; saveProg();
-  const news = [];
-  if (unlockedCount(f.country) > b1) news.push(f.country.clubs[b1].name);
-  if (unlockedCount(leg) > b2) news.push(leg.clubs[b2].name);
+  const news = [...f.country.clubs, ...leg.clubs].filter((k) => isUnlocked(k.id) && !before.has(k.id)).map((k) => k.name);
   if (news.length) { setTimeout(() => toast('🔓 Ai deblocat: ' + news.join(', ') + '!', 5), 2500); sfx.goal(); return '\n🔓 Echipă nouă deblocată: ' + news.join(', ') + '!'; }
   const nextLocked = f.country.clubs.find((k) => !isUnlocked(k.id));
   return nextLocked && !isLegends(f.country) ? '\n🏆 Încă ' + winsNeeded(nextLocked.id) + ' victorii pentru ' + nextLocked.name : '\n🏆 Victorie numărată!';
 }
+// gemuri
+function updateGems() { document.querySelectorAll('.gems').forEach((el) => { el.textContent = '💎 ' + prog.gems.toLocaleString('ro-RO'); }); }
+function addGems(n, why) {
+  prog.gems += n; saveProg(); updateGems();
+  setTimeout(() => toast('💎 +' + n + ' gemuri · ' + why, 3.2), 600);
+}
+// provocarile Versus AI: fiecare antrenament are o tinta; toate + o victorie = bonus
+const CHALLENGES = {
+  sprint: { label: '🏃 Sprint', goal: 'sub 7,6 secunde', gems: 300 },
+  fk: { label: '🎯 Lovituri libere', goal: 'minim 2 goluri din 5', gems: 400 },
+  pen: { label: '⚽ Penalty-uri', goal: 'minim 3 goluri din 5', gems: 300 },
+  pass: { label: '👟 Pase', goal: 'minim 6 pase corecte în 30 s', gems: 300 },
+};
+const SESSION_BONUS = 1000;
+function completeChallenge(key, ok) {
+  if (!ok) return '\n❌ Ținta: ' + CHALLENGES[key].goal + ' · mai încearcă!';
+  prog.session[key] = true; addGems(CHALLENGES[key].gems, CHALLENGES[key].label + ' reușit');
+  checkSession();
+  return '\n✅ Reușit! +' + CHALLENGES[key].gems + ' 💎';
+}
+function checkSession() {
+  const s = prog.session;
+  if (Object.keys(CHALLENGES).every((k) => s[k]) && s.win) {
+    prog.session = {}; saveProg();
+    setTimeout(() => { addGems(SESSION_BONUS, 'toate provocările + victorie! 🏆'); sfx.goal(); }, 3000);
+  } else saveProg();
+}
+
+// ecranul Versus AI: provocarile (cu tinta si gemuri) si meciul
+function renderHub() {
+  const s = prog.session, ids = { sprint: 'trSprint', fk: 'trFk', pen: 'trPen', pass: 'trPass' };
+  for (const k in CHALLENGES) {
+    const ch = CHALLENGES[k], el = $(ids[k]);
+    el.classList.toggle('done', !!s[k]);
+    el.innerHTML = `<b>${ch.label} ${s[k] ? '✅' : ''}</b>${ch.goal} · <span class="rw">+${ch.gems} 💎</span>`;
+  }
+  const n = Object.keys(CHALLENGES).filter((k) => s[k]).length + (s.win ? 1 : 0);
+  $('trSession').innerHTML = `Provocări: <b>${n} / 5</b> ${'✅'.repeat(n)}${'⬜'.repeat(5 - n)} · fă-le pe toate + câștigă meciul = <b style="color:#8fe9ff">+${SESSION_BONUS} 💎 bonus</b>`;
+  $('trWin').textContent = 'victorie: +' + [300, 800, 1200][game.diff] + ' 💎 (' + ['Ușor', 'Normal', 'Greu'][game.diff] + ')';
+  updateGems();
+}
+
+// ---------- pachete: 4000 💎 = o echipa noua din tara aleasa (sau surpriza), cu deschidere ca la jocurile mari ----------
+function openPacks() { renderPacks(); $('packPanel').classList.remove('hidden'); }
+function renderPacks() {
+  const list = COUNTRIES.map((c) => {
+    const left = lockedIn(c).length, price = isLegends(c) ? LEGEND_PACK_PRICE : PACK_PRICE, off = !left || prog.gems < price;
+    return `<div class="pp${isLegends(c) ? ' gold' : ''}${off ? ' off' : ''}" data-c="${c.id}"><span class="fl">${c.flag}</span><b>Pachet ${c.name}</b><small>${left ? left + ' echipe de deblocat' : 'toate deblocate ✅'}</small><span class="pr">${price.toLocaleString('ro-RO')} 💎</span></div>`;
+  });
+  const anyLeft = COUNTRIES.some((c) => !isLegends(c) && lockedIn(c).length);
+  list.unshift(`<div class="pp gold${!anyLeft || prog.gems < PACK_PRICE ? ' off' : ''}" data-c="surpriza"><span class="fl">🎁</span><b>Pachet Surpriză</b><small>o echipă din orice țară</small><span class="pr">${PACK_PRICE.toLocaleString('ro-RO')} 💎</span></div>`);
+  $('ppGrid').innerHTML = list.join('');
+  updateGems();
+}
+$('ppGrid').addEventListener('click', (e) => {
+  const el = e.target.closest('.pp'); if (!el) return;
+  let country = el.dataset.c === 'surpriza' ? null : COUNTRIES.find((c) => c.id === el.dataset.c);
+  if (!country) { const opts = COUNTRIES.filter((c) => !isLegends(c) && lockedIn(c).length); country = opts[Math.floor(Math.random() * opts.length)]; }
+  if (!country || !lockedIn(country).length) return toast('Ai deja toate echipele de aici ✅', 2);
+  const price = isLegends(country) ? LEGEND_PACK_PRICE : PACK_PRICE;
+  if (prog.gems < price) return toast('Îți mai trebuie ' + (price - prog.gems).toLocaleString('ro-RO') + ' 💎 · câștigă-le la Versus AI!', 3);
+  const pool = lockedIn(country), club = pool[Math.floor(Math.random() * pool.length)];
+  prog.gems -= price; prog.packs.push(club.id); saveProg(); updateGems();
+  openPackAnim(country, club);
+});
+$('ppBack').addEventListener('click', () => { $('packPanel').classList.add('hidden'); showHome(); });
+let poStep = 0, poTimer = 0, poData = null;
+function openPackAnim(country, club) {
+  poData = { country, club, team: buildTeam(club) }; poStep = 0;
+  $('packOpen').classList.remove('hidden'); initAudio(); sfx.whistle(); poNext();
+}
+function poNext() {                                       // 1) steagul tarii  2) cardul celui mai bun jucator  3) echipa deblocata
+  clearTimeout(poTimer);
+  const { country, club, team } = poData, st = $('poStage');
+  if (poStep === 0) st.innerHTML = `<div class="po-flag">${country.flag}</div><div class="po-name">${country.name.toUpperCase()}</div>`;
+  else if (poStep === 1) {
+    let best = 0, bi = 0; team.players.forEach((d, i) => { const o = cardOvr(d, FORMATION[i].role); if (o > best) { best = o; bi = i; } });
+    st.innerHTML = '<div class="po-card">' + cardHTML(team.players[bi], FORMATION[bi].role, true) + '</div>'; sfx.goal();
+  } else if (poStep === 2) {
+    st.innerHTML = `<div class="po-team"><i class="badge" style="${badgeCss(team)}"></i><h2>${club.name}</h2><p>🔓 Echipă deblocată! O găsești la 🔄 Alege echipele</p></div>`;
+    confetti(0, 0);
+  } else { $('packOpen').classList.add('hidden'); renderPacks(); return; }
+  poStep++; if (poStep < 3) poTimer = setTimeout(poNext, 2300);
+}
+$('packOpen').addEventListener('click', () => poNext());
 
 // ---------- echipele reale: alegi tara, apoi clubul (al tau si al calculatorului) ----------
 let clubIds = ['rma', 'fcb'];
@@ -2022,6 +2123,7 @@ $('pkDone').addEventListener('click', () => {
 $('hmPick').addEventListener('click', openPick);
 $('hmMatch').addEventListener('click', openPick);
 homeReady = true;
+updateGems();
 if (!isUnlocked(clubIds[0])) clubIds[0] = findClub(clubIds[0]).country.clubs[0].id;
 if (clubIds[0] === clubIds[1]) clubIds[1] = clubIds[0] === 'fcb' ? 'rma' : 'fcb';
 applyClubs(clubIds);
@@ -2132,18 +2234,27 @@ if (new URLSearchParams(location.search).has('goalcard')) { showGoalCard(squad[0
 if (new URLSearchParams(location.search).has('unlocktest')) {  // test: 5 victorii pe Normal cu o echipa din Spania deblocheaza Atletico
   const res = [];
   try {
-    prog = { wins: {}, total: 0 };
+    const saved = JSON.stringify(prog); prog = { wins: {}, total: 0, packs: [], gems: 0, session: {} };
     res.push('la inceput: Real=' + isUnlocked('rma') + ' Barca=' + isUnlocked('fcb') + ' Atletico=' + isUnlocked('atm') + ' Athletic=' + isUnlocked('ath') + ' (mai trebuie ' + winsNeeded('ath') + ') Betis=' + winsNeeded('bet') + ' LegendeMondiale=' + isUnlocked('legw'));
     applyClubs(['rma', 'fcb']); game.diff = 1;
     for (let i = 0; i < 5; i++) { startMatch(1); game.score = [2, 1]; game.half = 2; endMatch(); }
     res.push('dupa 5 victorii: Athletic=' + isUnlocked('ath') + ' Villarreal=' + isUnlocked('vil') + ' mesaj="' + $('msg').textContent.split('\n').slice(1, 3).join(' / ') + '"');
     game.diff = 0; startMatch(1); game.score = [3, 0]; endMatch(); res.push('pe Usor: total=' + prog.total);
     prog.total = 9; game.diff = 2; startMatch(1); game.score = [1, 0]; endMatch(); res.push('a 10-a victorie: LegendeRomania=' + isUnlocked('legro') + ' / Mondiale=' + isUnlocked('legw'));
-    prog = { wins: {}, total: 0 }; saveProg();
+    res.push('gemuri castigate=' + prog.gems);
+    // pachet: 4000 gemuri -> o echipa din Spania
+    prog.gems = 4000; openPacks(); const before = lockedIn(COUNTRIES[0]).length;
+    $('ppGrid').querySelector('[data-c="es"]').click();
+    res.push('pachet Spania: gemuri=' + prog.gems + ' blocate ' + before + '->' + lockedIn(COUNTRIES[0]).length + ' nou=' + prog.packs.join(',') + ' etapa=' + $('poStage').textContent.slice(0, 20));
+    $('packOpen').click(); res.push('card=' + $('poStage').textContent.slice(0, 30)); $('packOpen').click(); res.push('echipa=' + $('poStage').textContent.slice(0, 40)); $('packOpen').click();
+    prog = JSON.parse(saved); saveProg();
   } catch (e) { res.push('ERR ' + e.stack); }
   const pre = document.createElement('pre'); pre.id = 'simout'; pre.textContent = res.join(' | '); document.body.append(pre);
 }
-if (new URLSearchParams(location.search).has('pickshot')) { showHome(); openPick(); }   // test: poza cu alegerea echipelor
+if (new URLSearchParams(location.search).has('pickshot')) { showHome(); openPick(); }
+if (new URLSearchParams(location.search).has('hubshot')) { showHome(); openTrain(); }
+if (new URLSearchParams(location.search).has('packshot')) { prog.gems = 9000; showHome(); openPacks(); }
+if (new URLSearchParams(location.search).has('openshot')) { const c0 = COUNTRIES[0]; openPackAnim(c0, c0.clubs[5]); poNext(); clearTimeout(poTimer); }   // test: poza cu alegerea echipelor
 if (new URLSearchParams(location.search).has('picktest')) {    // test: alegi tara si echipele, apoi meci
   const res = [];
   try {
@@ -2166,9 +2277,9 @@ if (new URLSearchParams(location.search).has('hometest')) {    // test: ecranul 
     showHome(); res.push('home=' + vis('home') + ' carduri=' + $('hmPitch').children.length + ' ' + $('hmOvr').textContent);
     $('hmPitch').children[9].click(); res.push('card mare=' + vis('hmCard') + ' (' + $('hmCard').querySelector('.c-name').textContent + ')'); $('hmCard').click();
     $('hmSet').click(); res.push('setari=' + vis('menu') + ' home=' + vis('home')); $('setBack').click();
-    $('hmPlay').click(); for (let i = 0; i < 60; i++) tick(1 / 60, 0); res.push('dupa JOACA: state=' + game.state + ' home=' + vis('home'));
+    $('hmPlay').click(); res.push('VERSUS AI: hub=' + vis('trainPanel') + ' ' + $('trSession').textContent.slice(0, 30)); $('trPlay').click(); for (let i = 0; i < 60; i++) tick(1 / 60, 0); res.push('meci: state=' + game.state);
     toMenu(); res.push('inapoi: home=' + vis('home') + ' state=' + game.state);
-    $('hmTrain').click(); res.push('antrenament=' + vis('trainPanel'));
+    $('hmPacks').click(); res.push('pachete=' + vis('packPanel') + ' ' + $('ppGrid').children.length + ' pachete');
   } catch (e) { res.push('ERR ' + e.stack); }
   const pre = document.createElement('pre'); pre.id = 'simout'; pre.textContent = res.join(' | '); document.body.append(pre);
 }
