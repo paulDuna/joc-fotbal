@@ -7,7 +7,7 @@ import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose, 
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 43;
+const BUILD = 44;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -233,8 +233,8 @@ let radarHidden = false;
 const bcam = { pos: new THREE.Vector3(0, 20, 40), look: new THREE.Vector3() };
 // 5 camere: alegi din meniu, din pauza sau cu butonul 🎥 din meci (tasta C)
 const CAMS = [
-  { n: 'TV', h: 13, d: 27, follow: 1, xl: 46, k: 5 },           // jos, aproape, ca la televizor
-  { n: 'Largă', h: 25, d: 45, follow: 0.6, xl: 36, k: 3.5 },
+  { n: 'TV', h: 12, d: 27, follow: 1, xl: 46, k: 5, look: 7 },   // jos, aproape, ca la televizor
+  { n: 'Largă', h: 19, d: 44, follow: 0.55, xl: 34, k: 3.5, look: 13 },   // ca la televizor/FC Mobile: se vede si tribuna de vizavi
   { n: 'Sus', h: 56, d: 48, follow: 0.5, xl: 30, k: 3.5 },       // de sus, vezi mult din teren
   { n: 'Stadion', h: 40, d: 84, follow: 0.4, xl: 26, k: 3 },    // din tribuna, aproape tot terenul
   { n: 'Din spate', behind: true, follow: 1, xl: 46, k: 4 },     // in spatele jucatorului tau, spre poarta adversa
@@ -244,11 +244,11 @@ function setCam(i) {
   camMode = ((i % CAMS.length) + CAMS.length) % CAMS.length; camTV = camMode === 0;
   document.querySelectorAll('.cam').forEach((el) => el.classList.toggle('sel', +el.dataset.c === camMode));
   const lbl = $('camLbl'); if (lbl) lbl.textContent = (camMode + 1) + ' · ' + CAMS[camMode].n;
-  try { localStorage.setItem('fotbal_cam2', camMode); } catch (_) {}
+  try { localStorage.setItem('fotbal_cam3', camMode); } catch (_) {}
 }
 function nextCam() { setCam(camMode + 1); toast('🎥 Camera ' + (camMode + 1) + ': ' + CAMS[camMode].n, 1.6); }
 document.querySelectorAll('.cam').forEach((el) => el.addEventListener('click', () => setCam(+el.dataset.c)));
-try { const s = new URLSearchParams(location.search).get('cam') ?? localStorage.getItem('fotbal_cam2'); setCam(s === null ? 2 : +s); } catch (_) { setCam(2); }
+try { const s = new URLSearchParams(location.search).get('cam') ?? localStorage.getItem('fotbal_cam3'); setCam(s === null ? 1 : +s); } catch (_) { setCam(1); }
 const behindCam = () => CAMS[camMode].behind && game.state === 'play' && !game.drill && humans.length && !game.penView && !game.fkAim;
 // meci de zi sau de seara (cu nocturne)
 function setNight(on) {
@@ -1506,7 +1506,7 @@ function syncGfx(dt) {
   cam.zoom += ((celeb ? 0.55 : fa ? (camTV ? 1.35 : 0.85) : so ? 0.45 : game.state === 'replay' ? 0.6 : 1) - cam.zoom) * Math.min(1, 2 * dt);
   const [ch, cd] = CM.behind ? [13, 27] : [CM.h, CM.d];
   camera.position.set(cam.x, ch * CZ * cam.zoom, cam.lz + (cd * CZ - cam.z * 0.15) * cam.zoom);
-  camera.lookAt(cam.x, celeb ? 1 : 0, cam.lz);
+  camera.lookAt(cam.x, celeb ? 1 : 0, cam.lz - (celeb ? 0 : (CM.look || 0) * cam.zoom));
   if (behindCam() && !celeb) {                            // camera 5: in spatele jucatorului tau, cu fata spre poarta adversa
     const q = humans[0].ctrl, s = q.sign, bx = (q.x + ball.x) / 2, bz = (q.z + ball.z) / 2;
     const want = new THREE.Vector3(bx - s * 13 * CZ, 7.5 * CZ, bz * 0.85);
@@ -2084,15 +2084,15 @@ function openPacks() { renderPacks(); $('packPanel').classList.remove('hidden');
 function renderPacks() {
   const list = COUNTRIES.map((c) => {
     const left = lockedIn(c).length, price = isLegends(c) ? LEGEND_PACK_PRICE : PACK_PRICE, off = !left || prog.gems < price;
-    return `<div class="pp${isLegends(c) ? ' gold' : ''}${off ? ' off' : ''}" data-c="${c.id}"><span class="fl">${c.flag}</span><b>Pachet ${c.name}</b><small>${left ? left + ' echipe de deblocat' : 'toate deblocate ✅'}</small><span class="pr">${price.toLocaleString('ro-RO')} 💎</span></div>`;
+    return `<div class="pck${isLegends(c) ? ' gold' : ''}${off ? ' off' : ''}" data-c="${c.id}"><span class="fl">${c.flag}</span><b>Pachet ${c.name}</b><small>${left ? left + ' echipe de deblocat' : 'toate deblocate ✅'}</small><span class="pr">${price.toLocaleString('ro-RO')} 💎</span></div>`;
   });
   const anyLeft = COUNTRIES.some((c) => !isLegends(c) && lockedIn(c).length);
-  list.unshift(`<div class="pp gold${!anyLeft || prog.gems < PACK_PRICE ? ' off' : ''}" data-c="surpriza"><span class="fl">🎁</span><b>Pachet Surpriză</b><small>o echipă din orice țară</small><span class="pr">${PACK_PRICE.toLocaleString('ro-RO')} 💎</span></div>`);
+  list.unshift(`<div class="pck gold${!anyLeft || prog.gems < PACK_PRICE ? ' off' : ''}" data-c="surpriza"><span class="fl">🎁</span><b>Pachet Surpriză</b><small>o echipă din orice țară</small><span class="pr">${PACK_PRICE.toLocaleString('ro-RO')} 💎</span></div>`);
   $('ppGrid').innerHTML = list.join('');
   updateGems();
 }
 $('ppGrid').addEventListener('click', (e) => {
-  const el = e.target.closest('.pp'); if (!el) return;
+  const el = e.target.closest('.pck'); if (!el) return;
   let country = el.dataset.c === 'surpriza' ? null : COUNTRIES.find((c) => c.id === el.dataset.c);
   if (!country) { const opts = COUNTRIES.filter((c) => !isLegends(c) && lockedIn(c).length); country = opts[Math.floor(Math.random() * opts.length)]; }
   if (!country || !lockedIn(country).length) return toast('Ai deja toate echipele de aici ✅', 2);
@@ -2131,6 +2131,7 @@ function applyClubs(ids) {
   const a = findClub(ids[0]) || findClub('rma'), b = findClub(ids[1]) || findClub('fcb');
   const t0 = applyUpgrades(buildTeam(a.club)), t1 = buildTeam(b.club, t0.color);   // jucatorii tai au nivelurile lor   // daca tricourile seamana, adversarul joaca in echipamentul de deplasare
   TEAMS[0] = t0; TEAMS[1] = t1; clubIds = [a.club.id, b.club.id];
+  world.setCrowdColors(t0.color, t1.color);               // suporterii poarta culorile echipelor
   myTeam = 0;                                             // tu esti mereu prima echipa aleasa
   for (let t = 0; t < 2; t++) squad[t].forEach((p, i) => { substitute(p, TEAMS[t].players[i]); origD[allPlayers.indexOf(p)] = TEAMS[t].players[i]; });
   for (let t = 0; t < 2; t++) { $('t' + t).textContent = TEAMS[t].name; TEAM_CSS[t] = hex(TEAMS[t].color); bench[t] = TEAMS[t].bench.map((d) => ({ d, out: false })); }

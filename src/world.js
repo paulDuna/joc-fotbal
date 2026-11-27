@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SKIN } from './data.js';
+import { buildStadium } from './stadium.js';
 
 export const HALF_L = 52.5, HALF_W = 34, GOAL_W = 3.66, GOAL_H = 2.44, BALL_R = 0.11;
 
@@ -180,33 +181,6 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
 
   buildGoal(scene, -1); buildGoal(scene, 1);
 
-  // tribune (fara cea dinspre camera)
-  const crowd = crowdTexture();
-  const stand = (len, ry, px, pz) => {
-    const tex = crowd.clone(); tex.needsUpdate = true; tex.repeat.set(len / 30, 1.4); crowdTex.push(tex);
-    const grp = new THREE.Group(); grp.rotation.y = ry; grp.position.set(px, 0, pz);
-    const H = 24;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, H), new THREE.MeshBasicMaterial({ map: tex })); crowdMats.push(m.material);
-    m.rotation.x = -0.75; m.position.y = 1.5 + (H / 2) * Math.cos(0.75); m.position.z = -(H / 2) * Math.sin(0.75);
-    grp.add(m);
-    // inelul de sus al tribunei, cu un brau intunecat intre ele
-    const band = new THREE.Mesh(new THREE.BoxGeometry(len, 2.4, 1), new THREE.MeshStandardMaterial({ color: 0x1b1f27 }));
-    band.position.set(0, 20.2, -16.9); grp.add(band);
-    const tex2 = crowd.clone(); tex2.needsUpdate = true; tex2.repeat.set(len / 30, 0.8); tex2.offset.x = 0.37; crowdTex.push(tex2);
-    const H2 = 14, up = new THREE.Mesh(new THREE.PlaneGeometry(len, H2), new THREE.MeshBasicMaterial({ map: tex2 })); crowdMats.push(up.material);
-    up.rotation.x = -0.75; up.position.set(0, 21.4 + (H2 / 2) * Math.cos(0.75), -17.4 - (H2 / 2) * Math.sin(0.75)); grp.add(up);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(len, 0.6, 20), new THREE.MeshStandardMaterial({ color: 0x39404d }));
-    roof.position.set(0, 33.5, -24); grp.add(roof);
-    const base = new THREE.Mesh(new THREE.BoxGeometry(len, 1.5, 1), new THREE.MeshStandardMaterial({ color: 0x2a2f3a }));
-    base.position.set(0, 0.75, 0.4); grp.add(base);
-    scene.add(grp);
-  };
-  stand(130, 0, 0, -HALF_W - 9);
-  stand(86, Math.PI / 2, -HALF_L - 11, 0);
-  stand(86, -Math.PI / 2, HALF_L + 11, 0);
-  stand(34, Math.PI / 4, -HALF_L - 1, -HALF_W - 2);         // colturile din spate: stadionul e inchis
-  stand(34, -Math.PI / 4, HALF_L + 1, -HALF_W - 2);
-
   // panouri publicitare
   const adTex = canvasTex(1024, 64, (g, W, H) => {
     const cols = ['#0b3d91', '#b3001b', '#111', '#e6a700', '#0a7a4b'];
@@ -219,6 +193,7 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
   });
   adTex.wrapS = THREE.RepeatWrapping; adTex.repeat.set(2, 1);
   const ledTex = [adTex];                                  // panourile LED se misca (vezi main.js)
+  const stadium = buildStadium(scene, adTex); ledTex.push(...stadium.ledTex);   // tribunele 3D cu suporteri
   const ads = new THREE.Mesh(new THREE.PlaneGeometry(110, 1), new THREE.MeshBasicMaterial({ map: adTex }));
   ads.position.set(0, 0.5, -HALF_W - 4); scene.add(ads);
   {                                                         // panouri LED si pe partea dinspre camera (se vad jos pe ecran)
@@ -243,17 +218,6 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
     const b = new THREE.Mesh(new THREE.PlaneGeometry(56, 1), new THREE.MeshBasicMaterial({ map: t2 }));
     b.rotation.y = -sx * Math.PI / 2; b.position.set(sx * (HALF_L + 5), 0.5, 0); scene.add(b);
   }
-  // nocturne in colturile din spate
-  const steel = new THREE.MeshStandardMaterial({ color: 0x8a919c, roughness: 0.6 });
-  const lamp = new THREE.MeshBasicMaterial({ color: 0xfffbe6 });
-  for (const sx of [-1, 1]) {
-    const pole = new THREE.Mesh(new THREE.BoxGeometry(1.2, 44, 1.2), steel); pole.position.set(sx * 74, 22, -58); scene.add(pole);
-    const head = new THREE.Group(); head.position.set(sx * 74, 45, -58); head.rotation.y = -sx * 0.7; head.rotation.x = 0.25; scene.add(head);
-    head.add(new THREE.Mesh(new THREE.BoxGeometry(11, 7, 0.8), steel));
-    for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) {
-      const l = new THREE.Mesh(new THREE.CircleGeometry(0.9, 10), lamp); l.position.set(-3.9 + i * 2.6, -2.1 + j * 2.1, 0.45); head.add(l);
-    }
-  }
   // stralucirea nocturnelor (se vede doar seara)
   const glowTex = canvasTex(64, 64, (g) => {
     const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -262,8 +226,7 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
   });
   const glows = [];
   const glow = (x, y, z, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); sp.position.set(x, y, z); sp.scale.setScalar(s); sp.visible = false; scene.add(sp); glows.push(sp); };
-  for (const sx of [-1, 1]) glow(sx * 74, 45, -57, 26);
-  for (let i = -5; i <= 5; i++) glow(i * 12, 33, -HALF_W - 22, 7);           // lumini sub acoperisul tribunei
+  for (const l of stadium.lamps) glow(l.x, l.y, l.z, 9);   // luminile de pe marginea acoperisului
 
   // steaguri care flutura in tribune
   const flags = [], flagGeo = new THREE.PlaneGeometry(2.2, 1.4, 6, 1);
@@ -271,7 +234,7 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
   for (let i = 0; i < 26; i++) {
     const m = new THREE.Mesh(flagGeo.clone(), new THREE.MeshBasicMaterial({ color: flagCols[i % 4], side: THREE.DoubleSide }));
     const u = Math.random(), row = Math.random();
-    m.position.set(-60 + u * 120, 4 + row * 12, -HALF_W - 11 - row * 12.5); m.rotation.x = -0.3;
+    const r = Math.floor(row * 17); m.position.set(-55 + u * 110, 1.6 + r * 0.42 + 1.4, -HALF_W - 7 - r * 0.85 - 0.3); m.rotation.x = -0.15;
     m.userData = { ph: Math.random() * 6, base: Float32Array.from(m.geometry.attributes.position.array) };
     scene.add(m); flags.push(m);
   }
@@ -291,7 +254,7 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
     hemi.color.set(on ? 0x7f93b8 : 0xffffff); hemi.groundColor.set(on ? 0x14261a : 0x4a7a3a); hemi.intensity = on ? 0.35 : 1.15;
     sun.color.set(on ? sunNight.c : sunDay.c); sun.intensity = on ? sunNight.i : sunDay.i;
     renderer.toneMappingExposure = on ? 1.0 : 1.15;
-    for (const m of crowdMats) m.color.set(on ? 0x5a6274 : 0xffffff);      // tribunele sunt in semiintuneric, terenul e luminat
+    stadium.setNight(on);                                   // tribunele sunt in semiintuneric, terenul e luminat
     outer.material.color.set(on ? 0x163a17 : 0x2f7429);
     for (const gl of glows) gl.visible = on;
   }
@@ -307,7 +270,7 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
   function update(dt, t, excited) {
     updateNets(dt);
     // publicul: se misca tot timpul putin, sare la gol
-    crowdTex.forEach((tx, i) => { tx.offset.y = Math.sin(t * (excited ? 9 : 2.2) + i * 1.7) * (excited ? 0.012 : 0.0025); });
+    stadium.update(t, excited);
     for (const f of flags) {                                 // steagurile flutura
       const p = f.geometry.attributes.position, a = p.array, b = f.userData.base;
       for (let i = 0; i < a.length; i += 3) { const k = (b[i] + 1.1) / 2.2; a[i + 2] = b[i + 2] + Math.sin(t * (excited ? 9 : 5) + f.userData.ph + b[i] * 2.5) * 0.35 * k; }
@@ -322,7 +285,7 @@ export function buildWorld(scene, renderer, shadowSize = 2048) {
       if (life >= 1) s.sp.visible = false;
     }
   }
-  return { sun, crowdTex, ledTex, setNight, flare, update, isNight: () => night };
+  return { sun, crowdTex, ledTex, setNight, flare, update, isNight: () => night, setCrowdColors: (a, b) => stadium.setColors(a, b) };
 }
 
 // ---------- minge ----------

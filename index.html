@@ -119,11 +119,11 @@
   #packPanel { position: fixed; inset: 0; z-index: 48; background: radial-gradient(ellipse at top, #2a1450, #070312 70%); display: flex; flex-direction: column; padding: 10px calc(14px + env(safe-area-inset-right)) 10px calc(14px + env(safe-area-inset-left)); box-sizing: border-box; }
   .pp-gems { font-weight: 900; color: #8fe9ff; font-size: 18px; }
   .pp-grid { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; overflow-y: auto; overflow-x: hidden; min-width: 0; align-content: start; touch-action: pan-y; padding-bottom: 10px; }
-  .pp { min-width: 0; box-sizing: border-box; overflow-wrap: anywhere; position: relative; border-radius: 16px; padding: 14px 10px; text-align: center; cursor: pointer; background: linear-gradient(160deg, #6a3cc8, #2c1470); border: 2px solid #c79bff; box-shadow: 0 6px 20px rgba(120,60,220,.4); }
-  .pp .fl { font-size: 42px; display: block; } .pp b { display: block; font-size: 16px; margin: 4px 0; } .pp small { opacity: .8; display: block; }
-  .pp .pr { display: inline-block; margin-top: 8px; font-weight: 900; color: #0b1420; background: #8fe9ff; border-radius: 10px; padding: 4px 10px; }
-  .pp.gold { background: linear-gradient(160deg, #e9bb3c, #8a5a10); border-color: #ffe08a; } .pp.off { opacity: .45; filter: grayscale(.7); }
-  body.touch .pp { padding: 8px; } body.touch .pp .fl { font-size: 30px; } body.touch .pp-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; } body.touch .pp b { font-size: 13px; }
+  .pck { min-width: 0; box-sizing: border-box; overflow-wrap: anywhere; position: relative; border-radius: 16px; padding: 14px 10px; text-align: center; cursor: pointer; background: linear-gradient(160deg, #6a3cc8, #2c1470); border: 2px solid #c79bff; box-shadow: 0 6px 20px rgba(120,60,220,.4); }
+  .pck .fl { font-size: 42px; display: block; } .pck b { display: block; font-size: 16px; margin: 4px 0; } .pck small { opacity: .8; display: block; }
+  .pck .pr { display: inline-block; margin-top: 8px; font-weight: 900; color: #0b1420; background: #8fe9ff; border-radius: 10px; padding: 4px 10px; }
+  .pck.gold { background: linear-gradient(160deg, #e9bb3c, #8a5a10); border-color: #ffe08a; } .pck.off { opacity: .45; filter: grayscale(.7); }
+  body.touch .pck { padding: 8px; } body.touch .pck .fl { font-size: 30px; } body.touch .pp-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; } body.touch .pck b { font-size: 13px; }
   #packOpen { position: fixed; inset: 0; z-index: 70; background: radial-gradient(circle, #3b1d7a 0%, #0a0418 70%); display: flex; align-items: center; justify-content: center; flex-direction: column; overflow: hidden; }
   #packOpen::before { content: ''; position: absolute; width: 160vmax; height: 160vmax; background: repeating-conic-gradient(rgba(255,220,120,.12) 0 8deg, transparent 8deg 16deg); animation: poSpin 12s linear infinite; }
   @keyframes poSpin { to { transform: rotate(360deg); } }
@@ -277,7 +277,7 @@
   <div class="box">
     <h1>⚙️ Setări</h1>
     <div class="opts"><div class="opt" id="setBack">◀ Înapoi la echipă</div></div>
-    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 43</b></p>
+    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 44</b></p>
     <div class="opts menu-opts">
       <div class="opt" data-mode="1"><kbd class="keysOnly">1</kbd> <span class="keysOnly">Un jucător (contra calculatorului)</span><span class="touchOnly">▶ Joacă</span></div>
       <div class="opt keysOnly" data-mode="2"><kbd>2</kbd> Doi jucători</div>
