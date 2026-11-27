@@ -6,7 +6,7 @@ import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose, 
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 36;
+const BUILD = 37;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -145,7 +145,7 @@ window.addEventListener('keydown', (e) => {
   if (!LOCAL.keys.has(e.code)) LOCAL.pressed.add(e.code);
   LOCAL.keys.add(e.code);
   initAudio();
-  if (game.state === 'menu') { if (e.code === 'Digit1') openTrain(); if (e.code === 'Digit2') startMatch(2); }
+  if (game.state === 'menu') { if (e.code === 'Digit1') startMatch(1); if (e.code === 'Digit2') startMatch(2); }
   else if (game.state === 'end' && e.code === 'Enter') toMenu();
 });
 window.addEventListener('keyup', (e) => { LOCAL.keys.delete(e.code); LOCAL.released.add(e.code); });
@@ -216,11 +216,12 @@ function setDur(m) {                                     // durata reprizei, in 
 }
 document.querySelectorAll('.dur').forEach((el) => el.addEventListener('click', () => setDur(+el.dataset.m)));
 try { setDur(+localStorage.getItem('fotbal_dur')); } catch (_) { setDur(4); }
-let myTeam = 0;                                          // cu ce echipa joci cand esti singur (0 = Albastrii, 1 = Rosiii)
+let myTeam = 0, homeReady = false;                                          // cu ce echipa joci cand esti singur (0 = Albastrii, 1 = Rosiii)
 function setMyTeam(t) {
   myTeam = t === 1 ? 1 : 0;
   document.querySelectorAll('.myt').forEach((el) => el.classList.toggle('sel', +el.dataset.t === myTeam));
   try { localStorage.setItem('fotbal_team', myTeam); } catch (_) {}
+  if (homeReady) renderHome();
 }
 document.querySelectorAll('.myt').forEach((el) => el.addEventListener('click', () => setMyTeam(+el.dataset.t)));
 try { setMyTeam(+localStorage.getItem('fotbal_team')); } catch (_) { setMyTeam(0); }
@@ -440,7 +441,7 @@ function startMatch(mode, online) {
   }
   MARKERS.forEach((m, i) => m.setVisible(i < mode));
   $('p1').classList.toggle('hidden', mode < 1); $('p2').classList.toggle('hidden', mode < 2 || !!online);
-  $('menu').classList.add('hidden'); $('touch').classList.toggle('hidden', !isTouch); $('pauseBtn').classList.remove('hidden'); $('teamBtn').classList.remove('hidden'); $('camBtn').classList.remove('hidden');
+  $('menu').classList.add('hidden'); $('home').classList.add('hidden'); $('touch').classList.toggle('hidden', !isTouch); $('pauseBtn').classList.remove('hidden'); $('teamBtn').classList.remove('hidden'); $('camBtn').classList.remove('hidden');
   players.length = 0; players.push(...allPlayers);
   resetSquads();
   players.forEach((p) => { p.stamina = 1; p.yellow = 0; p.sign = p.team === 0 ? 1 : -1; p.group.visible = true; });
@@ -448,7 +449,7 @@ function startMatch(mode, online) {
   game.state = 'play';
   kickoff(0);
 }
-function toMenu() { netClose(); drillCleanup(); $('trainPanel').classList.add('hidden'); $('camBtn').classList.add('hidden'); game.state = 'menu'; $('touch').classList.add('hidden'); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden'); $('teamPanel').classList.add('hidden'); TGT.forEach((m) => { m.visible = false; }); toast('', 0); $('menu').classList.remove('hidden'); $('msg').classList.remove('on'); }
+function toMenu() { netClose(); drillCleanup(); $('trainPanel').classList.add('hidden'); $('camBtn').classList.add('hidden'); game.state = 'menu'; $('touch').classList.add('hidden'); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden'); $('teamPanel').classList.add('hidden'); TGT.forEach((m) => { m.visible = false; }); toast('', 0); showHome(); $('msg').classList.remove('on'); }
 
 function setOwner(p) {
   const off = ball.offside === p; ball.offside = null;
@@ -1537,7 +1538,7 @@ function openTrain(result) {
   drillCleanup();
   game.state = 'menu';
   players.length = 0; players.push(...allPlayers); allPlayers.forEach((p) => { p.group.visible = true; });
-  $('menu').classList.add('hidden'); $('touch').classList.add('hidden'); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden'); $('camBtn').classList.add('hidden');
+  $('menu').classList.add('hidden'); $('home').classList.add('hidden'); $('touch').classList.add('hidden'); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden'); $('camBtn').classList.add('hidden');
   $('p1').classList.add('hidden'); MARKERS.forEach((m) => m.setVisible(false));
   const b = TRAIN_BEST;
   $('trBest').innerHTML = 'Recorduri: 🏃 ' + (b.sprint ? b.sprint.toFixed(2) + ' s' : '–') + ' · 🎯 ' + (b.fk ?? '–') + '/5 · ⚽ ' + (b.pen ?? '–') + '/5 · 👟 pase ' + (b.pass ? b.pass.toFixed(1) + ' s' : '–');
@@ -1559,7 +1560,7 @@ function drillSetup(list) {                               // pe teren raman doar
   players.length = 0; players.push(...list);
   ball.owner = ball.freeKick = ball.throwIn = ball.cornerK = ball.offside = ball.passTarget = null; ball.curve = 0;
   game.fkAim = null; fkDots.visible = false; game.penView = null;
-  $('trainPanel').classList.add('hidden'); $('menu').classList.add('hidden');
+  $('trainPanel').classList.add('hidden'); $('menu').classList.add('hidden'); $('home').classList.add('hidden');
   $('touch').classList.toggle('hidden', !isTouch); $('pauseBtn').classList.remove('hidden'); $('teamBtn').classList.add('hidden'); $('camBtn').classList.remove('hidden');
   $('p1').classList.remove('hidden'); $('p2').classList.add('hidden');
 }
@@ -1798,7 +1799,7 @@ function onClientData(m) {
     [net.team, 1 - net.team].forEach((t, i) => humans.push({ team: t, keys: KEYMAPS[0], ctrl: squad[t][9], charge: 0, charging: false, marker: MARKERS[i], tgt: TGT[i], passTo: null, swT: 0 }));
     MARKERS.forEach((mk) => mk.setVisible(true));
     $('p1').classList.remove('hidden'); $('p2').classList.add('hidden');
-    $('menu').classList.add('hidden'); $('touch').classList.toggle('hidden', !isTouch); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden'); $('camBtn').classList.remove('hidden');
+    $('menu').classList.add('hidden'); $('home').classList.add('hidden'); $('touch').classList.toggle('hidden', !isTouch); $('pauseBtn').classList.add('hidden'); $('teamBtn').classList.add('hidden'); $('camBtn').classList.remove('hidden');
     game.state = 'play';
     toast('Ai intrat! Tu ești ' + TEAMS[net.team].name, 3);
     return;
@@ -1879,17 +1880,61 @@ $('netJoin').addEventListener('click', () => { $('netChoose').classList.add('hid
 $('netGo').addEventListener('click', () => netJoin($('netInput').value.trim()));
 $('netBack').addEventListener('click', () => { netClose(); showNetPanel(false); });
 
+// ---------- ecranul principal: echipa ta pe teren, din carduri, si butonul mare JOACA ----------
+const POS_RO = { G: 'POR', D: 'FUN', M: 'MIJ', A: 'ATA' };
+function cardOvr(d, role) {                               // nota jucatorului, dupa post
+  const r = (x) => Math.round(x);
+  if (role === 'G') return r(d.def * 0.85 + d.pas * 0.15);
+  if (role === 'D') return r(d.def * 0.5 + d.spd * 0.2 + d.pas * 0.15 + d.dri * 0.15);
+  if (role === 'M') return r(d.pas * 0.35 + d.dri * 0.25 + d.sho * 0.2 + d.def * 0.1 + d.spd * 0.1);
+  return r(d.sho * 0.35 + d.spd * 0.25 + d.dri * 0.25 + d.pas * 0.15);
+}
+const cardTier = (o) => (o >= 88 ? 'special' : o >= 80 ? 'gold' : o >= 70 ? 'silver' : 'bronze');
+const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+function cardHTML(d, role, big) {
+  const o = cardOvr(d, role), skin = hex(SKIN[d.t] ?? SKIN[0]), hair = d.s === 'bald' ? 'transparent' : hex(d.h ?? 0x18120e);
+  const stats = big ? `<div class="c-stats"><span><b>${d.spd}</b>VIT</span><span><b>${d.dri}</b>DRI</span><span><b>${d.sho}</b>ȘUT</span><span><b>${d.def}</b>${role === 'G' ? 'REF' : 'DEF'}</span><span><b>${d.pas}</b>PAS</span><span><b>${Math.round((d.spd + d.def) / 2)}</b>FIZ</span></div>` : '';
+  return `<div class="card ${cardTier(o)}"><span class="c-ovr">${o}</span><span class="c-pos">${POS_RO[role]}</span><span class="c-av" style="background:${skin}"><i style="background:${hair}"></i></span>${stats}<span class="c-name">${d.name}</span></div>`;
+}
+function renderHome() {
+  const team = squad[myTeam], pitch = $('hmPitch'); let sum = 0;
+  pitch.innerHTML = team.map((p, i) => {
+    const f = FORMATION[i], top = 86 - (f.x + 50) / 66 * 72, left = 50 + f.z / 30 * 38;
+    sum += cardOvr(p.d, p.role);
+    return cardHTML(p.d, p.role).replace('class="card ', `data-i="${i}" style="left:${left}%;top:${top}%" class="card `);
+  }).join('');
+  $('hmOvr').textContent = '⭐ Echipă ' + Math.round(sum / team.length);
+}
+function showHome() {
+  game.state = 'menu'; $('menu').classList.add('hidden'); $('hmCard').classList.add('hidden');
+  renderHome(); $('home').classList.remove('hidden');
+}
+$('hmPitch').addEventListener('click', (e) => {          // atingi un card: il vezi mare, cu toate statisticile
+  const el = e.target.closest('.card'); if (!el) return;
+  const p = squad[myTeam][+el.dataset.i];
+  $('hmCard').innerHTML = cardHTML(p.d, p.role, true) + '<p style="position:absolute;bottom:6%;width:100%;text-align:center;opacity:.8">Atinge ca să închizi</p>';
+  $('hmCard').classList.remove('hidden');
+});
+$('hmCard').addEventListener('click', () => $('hmCard').classList.add('hidden'));
+$('hmPlay').addEventListener('click', () => { initAudio(); goFullscreen(); startMatch(1); });
+$('hmTrain').addEventListener('click', () => { initAudio(); goFullscreen(); openTrain(); });
+$('hmOnline').addEventListener('click', () => { initAudio(); showNetPanel(true); });
+$('hm2p').addEventListener('click', () => { initAudio(); startMatch(2); });
+$('hmSet').addEventListener('click', () => { $('home').classList.add('hidden'); $('menu').classList.remove('hidden'); });
+$('setBack').addEventListener('click', () => showHome());
+homeReady = true;
+
 // ---------- introducerea: camera zboara in jurul stadionului, apare logo-ul; o atingere te duce in meniu ----------
 function endIntro() {
   if (game.state !== 'intro') return;
   initAudio(); sfx.whistle(); sfx.goal();                // publicul te primeste
   $('intro').classList.add('fade'); setTimeout(() => $('intro').classList.add('hidden'), 750);
-  game.state = 'menu'; $('menu').classList.remove('hidden'); document.body.classList.remove('intro');
+  game.state = 'menu'; showHome(); document.body.classList.remove('intro');
 }
 if (![...new URLSearchParams(location.search).keys()].some((k) => k !== 'touch')) {   // la teste (?demo, ?sim...) sarim peste
-  game.state = 'intro'; $('menu').classList.add('hidden'); $('intro').classList.remove('hidden'); document.body.classList.add('intro');
+  game.state = 'intro'; $('menu').classList.add('hidden'); $('home').classList.add('hidden'); $('intro').classList.remove('hidden'); document.body.classList.add('intro');
   $('intro').addEventListener('pointerdown', (e) => { e.preventDefault(); endIntro(); });
-}
+} else if (game.state === 'menu') showHome();             // fara introducere: direct ecranul cu echipa
 
 if (new URLSearchParams(location.search).has('divetest')) { game.state = 'divetest'; document.body.classList.add('iconshot'); allPlayers.forEach((p) => { p.group.visible = p === squad[1][0]; }); }
 if (new URLSearchParams(location.search).has('iconshot')) {     // doar pentru a face iconita
@@ -1901,7 +1946,7 @@ if (new URLSearchParams(location.search).has('iconshot')) {     // doar pentru a
 const demo = new URLSearchParams(location.search).has('demo');
 const autoMode = +new URLSearchParams(location.search).get('mode');
 if (autoMode === 1 || autoMode === 2) startMatch(autoMode);
-if (demo) { $('menu').classList.add('hidden'); game.state = 'play'; kickoff(0); }
+if (demo) { $('menu').classList.add('hidden'); $('home').classList.add('hidden'); game.state = 'play'; kickoff(0); }
 if (new URLSearchParams(location.search).has('pens') && game.state === 'play') { game.half = 4; startShootout(); }   // test: direct la penalty-uri
 
 const SNAP = 11;
@@ -1981,6 +2026,18 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 window.__game = { game, ball, players, tick, log, humans, stats, keys, pressed, released };
+if (new URLSearchParams(location.search).has('hometest')) {    // test: ecranul principal si butoanele lui
+  const res = [], vis = (id) => !$(id).classList.contains('hidden');
+  try {
+    showHome(); res.push('home=' + vis('home') + ' carduri=' + $('hmPitch').children.length + ' ' + $('hmOvr').textContent);
+    $('hmPitch').children[9].click(); res.push('card mare=' + vis('hmCard') + ' (' + $('hmCard').querySelector('.c-name').textContent + ')'); $('hmCard').click();
+    $('hmSet').click(); res.push('setari=' + vis('menu') + ' home=' + vis('home')); $('setBack').click();
+    $('hmPlay').click(); for (let i = 0; i < 60; i++) tick(1 / 60, 0); res.push('dupa JOACA: state=' + game.state + ' home=' + vis('home'));
+    toMenu(); res.push('inapoi: home=' + vis('home') + ' state=' + game.state);
+    $('hmTrain').click(); res.push('antrenament=' + vis('trainPanel'));
+  } catch (e) { res.push('ERR ' + e.stack); }
+  const pre = document.createElement('pre'); pre.id = 'simout'; pre.textContent = res.join(' | '); document.body.append(pre);
+}
 if (new URLSearchParams(location.search).has('crosstest')) {   // test: centrare de pe margine si pasa cu joystick-ul tinut in alta parte
   const res = [], dt = 1 / 60, T = (n) => { for (let i = 0; i < n; i++) tick(dt, 0); };
   try {
