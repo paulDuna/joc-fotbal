@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { TEAMS, FORMATION, SKIN } from './data.js';
+import { COUNTRIES, findClub, buildTeam, clubRating } from './clubs.js';
 import { buildWorld, makeBall, makePlayerMesh, makeHead, makeMarker, netHit, netDepthAt, HALF_L, HALF_W, GOAL_W, GOAL_H, BALL_R } from './world.js';
 import { initAudio, sfx } from './audio.js';
 import { loadMannequin, makeMannequin, animateMannequin, attachHead, afterPose, armsUp } from './mannequin.js';
 
 // versiunea codului: trebuie sa fie aceeasi cu "versiunea N" din meniu (index.html). Daca telefonul a luat
 // un meniu nou dar cod vechi (salvat), se reincarca singur o data.
-const BUILD = 38;
+const BUILD = 39;
 {
   const m = /versiunea (\d+)/.exec(document.body.textContent);
   try {
@@ -1760,7 +1761,7 @@ async function netHost(forced) {
     net.conn = conn;
     conn.on('open', () => {
       net.role = 'host'; net.frame = 0;
-      conn.send({ t: 'start', team: 1 - myTeam });
+      conn.send({ t: 'start', team: 1 - myTeam, clubs: clubIds });   // prietenul primeste aceleasi echipe
       showNetPanel(false); goFullscreen(); startMatch(2, true);
       toast('Prietenul a intrat! Tu ești ' + TEAMS[myTeam].name, 3);
     });
@@ -1791,6 +1792,7 @@ function onClientData(m) {
   if (!m) return;
   if (m.t === 'start') {                                 // incepe meciul la prieten
     net.role = 'client'; net.team = m.team; net.frame = 0;
+    if (m.clubs) { applyClubs(m.clubs); myTeam = 0; }
     showNetPanel(false); goFullscreen();
     game.mode = 2; game.score = [0, 0]; game.pens = null; game.half = 1; game.time = 0; updateScore();
     players.length = 0; players.push(...allPlayers);
@@ -1934,7 +1936,53 @@ function showGoalCard(p) {
   clearTimeout(goalCardT);
   goalCardT = setTimeout(() => { el.classList.add('out'); goalCardT = setTimeout(() => el.classList.add('hidden'), 520); }, 3200);
 }
+
+// ---------- echipele reale: alegi tara, apoi clubul (al tau si al calculatorului) ----------
+let clubIds = ['rma', 'fcb'];
+try { const s = JSON.parse(localStorage.getItem('fotbal_clubs') || 'null'); if (Array.isArray(s) && findClub(s[0]) && findClub(s[1])) clubIds = s; } catch (_) {}
+const badgeCss = (t) => `background:linear-gradient(135deg, ${hex(t.color)} 0 55%, ${hex(t.shorts)} 55% 100%)`;
+function applyClubs(ids) {
+  const a = findClub(ids[0]) || findClub('rma'), b = findClub(ids[1]) || findClub('fcb');
+  const t0 = buildTeam(a.club), t1 = buildTeam(b.club, t0.color);   // daca tricourile seamana, adversarul joaca in echipamentul de deplasare
+  TEAMS[0] = t0; TEAMS[1] = t1; clubIds = [a.club.id, b.club.id];
+  myTeam = 0;                                             // tu esti mereu prima echipa aleasa
+  for (let t = 0; t < 2; t++) squad[t].forEach((p, i) => { substitute(p, TEAMS[t].players[i]); origD[allPlayers.indexOf(p)] = TEAMS[t].players[i]; });
+  for (let t = 0; t < 2; t++) { $('t' + t).textContent = TEAMS[t].name; TEAM_CSS[t] = hex(TEAMS[t].color); bench[t] = TEAMS[t].bench.map((d) => ({ d, out: false })); }
+  try { localStorage.setItem('fotbal_clubs', JSON.stringify(clubIds)); } catch (_) {}
+  $('hmMine').innerHTML = `<i class="badge" style="${badgeCss(t0)}"></i>${t0.name}`;
+  $('hmOpp').innerHTML = `<i class="badge" style="${badgeCss(t1)}"></i>${t1.name}`;
+  if (homeReady) renderHome();
+}
+let pkSide = 0, pkCountry = null, pkSel = null;
+function openPick() {
+  pkSel = clubIds.slice(); pkSide = 0; pkCountry = findClub(pkSel[0]).country.id;
+  renderPick(); $('pickPanel').classList.remove('hidden');
+}
+function renderPick() {
+  $('pkCountries').innerHTML = COUNTRIES.map((c) => `<div class="pk-country${c.id === pkCountry ? ' sel' : ''}" data-c="${c.id}">${c.flag} ${c.name}</div>`).join('');
+  const country = COUNTRIES.find((c) => c.id === pkCountry);
+  $('pkClubs').innerHTML = country.clubs.map((k) => {
+    const t = buildTeam(k), cls = (pkSel[0] === k.id ? ' mine' : '') + (pkSel[1] === k.id ? ' opp' : '');
+    return `<div class="pk-club${cls}" data-k="${k.id}"><i class="badge" style="${badgeCss(t)}"></i><div><b>${k.name}</b><small>⭐ ${clubRating(k)} · ${t.players[9].name}</small></div></div>`;
+  }).join('');
+  const nm = (id) => findClub(id).club.name;
+  $('pkMine').textContent = nm(pkSel[0]); $('pkOpp').textContent = nm(pkSel[1]);
+  document.querySelectorAll('.pk-side').forEach((el) => el.classList.toggle('sel', +el.dataset.s === pkSide));
+}
+$('pickPanel').addEventListener('click', (e) => {
+  const c = e.target.closest('.pk-country'); if (c) { pkCountry = c.dataset.c; return renderPick(); }
+  const s = e.target.closest('.pk-side'); if (s) { pkSide = +s.dataset.s; pkCountry = findClub(pkSel[pkSide]).country.id; return renderPick(); }
+  const k = e.target.closest('.pk-club');
+  if (k) { pkSel[pkSide] = k.dataset.k; if (pkSide === 0) { pkSide = 1; toast('Acum alege echipa calculatorului 🤖', 2); } renderPick(); }
+});
+$('pkDone').addEventListener('click', () => {
+  if (pkSel[0] === pkSel[1]) return toast('Alege două echipe diferite', 2);
+  $('pickPanel').classList.add('hidden'); applyClubs(pkSel); showHome();
+});
+$('hmPick').addEventListener('click', openPick);
+$('hmMatch').addEventListener('click', openPick);
 homeReady = true;
+applyClubs(clubIds);
 
 // ---------- introducerea: camera zboara in jurul stadionului, apare logo-ul; o atingere te duce in meniu ----------
 function endIntro() {
@@ -2039,6 +2087,23 @@ function frame(now) {
 requestAnimationFrame(frame);
 window.__game = { game, ball, players, tick, log, humans, stats, keys, pressed, released };
 if (new URLSearchParams(location.search).has('goalcard')) { showGoalCard(squad[0][8]); clearTimeout(goalCardT); }   // test: poza cu cardul de gol (ramane pe ecran)
+if (new URLSearchParams(location.search).has('pickshot')) { showHome(); openPick(); }   // test: poza cu alegerea echipelor
+if (new URLSearchParams(location.search).has('picktest')) {    // test: alegi tara si echipele, apoi meci
+  const res = [];
+  try {
+    showHome(); openPick();
+    res.push('tari=' + $('pkCountries').children.length + ' echipe Spania=' + $('pkClubs').children.length);
+    $('pkCountries').querySelector('[data-c="ro"]').click(); $('pkClubs').querySelector('[data-k="fcsb"]').click();
+    $('pkCountries').querySelector('[data-c="leg"]').click(); $('pkClubs').querySelector('[data-k="legw"]').click();
+    res.push('ales: ' + $('pkMine').textContent + ' vs ' + $('pkOpp').textContent);
+    $('pkDone').click();
+    res.push('home: ' + $('hmMine').textContent + ' VS ' + $('hmOpp').textContent + ' | atacant=' + squad[0][9].d.name + ' / ' + squad[1][9].d.name + ' | ' + $('hmOvr').textContent);
+    startMatch(1); for (let i = 0; i < 3000; i++) tick(1 / 60, 0);
+    res.push('meci: ' + game.score.join('-') + ' t0=' + $('t0').textContent + ' t1=' + $('t1').textContent + ' log=' + log.slice(-2).join(' / '));
+    if (!new URLSearchParams(location.search).has('keep')) applyClubs(['rma', 'fcb']);
+  } catch (e) { res.push('ERR ' + e.stack); }
+  const pre = document.createElement('pre'); pre.id = 'simout'; pre.textContent = res.join(' | '); document.body.append(pre);
+}
 if (new URLSearchParams(location.search).has('hometest')) {    // test: ecranul principal si butoanele lui
   const res = [], vis = (id) => !$(id).classList.contains('hidden');
   try {

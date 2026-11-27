@@ -140,6 +140,27 @@
   body.touch .hm-logo { font-size: 18px; } body.touch .hm-side { width: 170px; gap: 7px; } body.touch .hm-play { font-size: 24px; padding: 14px 8px; }
   body.touch .hm-btn { font-size: 14px; padding: 8px; } body.touch .hm-ovr { font-size: 12px; }
   #menu .menu-opts { display: none; }
+  #menu .myt-row { display: none; }
+  .hm-match { display: flex; align-items: center; gap: 10px; font-size: 15px; } .hm-match b { color: #ffd34d; }
+  .hm-club { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; background: rgba(255,255,255,.08); padding: 5px 12px 5px 6px; border-radius: 16px; cursor: pointer; }
+  .badge { width: 22px; height: 22px; border-radius: 50%; display: inline-block; border: 2px solid rgba(255,255,255,.8); flex: none; }
+  .hm-pick { border-color: #4ae3ff; }
+  /* alegerea echipelor (tari sus, echipe jos) */
+  #pickPanel { position: fixed; inset: 0; z-index: 48; background: linear-gradient(180deg, #0b1a36, #050a14); display: flex; flex-direction: column; padding: 10px calc(14px + env(safe-area-inset-right)) 10px calc(14px + env(safe-area-inset-left)); box-sizing: border-box; }
+  .pk-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; } .pk-title { font-size: 22px; }
+  .pk-sides { display: flex; align-items: center; gap: 10px; } .pk-sides > b { color: #ffd34d; }
+  .pk-side { padding: 6px 14px; border-radius: 12px; border: 2px solid rgba(255,255,255,.25); cursor: pointer; font-size: 13px; text-align: center; min-width: 120px; }
+  .pk-side span { font-weight: 800; font-size: 15px; } .pk-side.sel { border-color: #ffd34d; background: rgba(255,216,74,.15); }
+  .pk-done { margin-left: auto; padding: 10px 22px; border-color: #7ed321; background: rgba(126,211,33,.2); }
+  .pk-countries { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; touch-action: pan-x; flex: none; }
+  .pk-country { flex: none; padding: 8px 14px; border-radius: 12px; background: rgba(255,255,255,.08); border: 2px solid transparent; cursor: pointer; font-weight: 700; white-space: nowrap; }
+  .pk-country.sel { border-color: #4ae3ff; background: rgba(74,227,255,.15); }
+  .pk-clubs { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; align-content: start; overflow-y: auto; touch-action: pan-y; }
+  .pk-club { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 14px; background: rgba(255,255,255,.07); border: 2px solid transparent; cursor: pointer; }
+  .pk-club .badge { width: 40px; height: 40px; } .pk-club b { display: block; font-size: 15px; } .pk-club small { opacity: .75; }
+  .pk-club.mine { border-color: #ffd34d; } .pk-club.opp { border-color: #ff5a36; }
+  body.touch .pk-title { font-size: 16px; } body.touch .pk-side { min-width: 96px; padding: 4px 8px; font-size: 11px; } body.touch .pk-side span { font-size: 12px; }
+  body.touch .pk-clubs { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } body.touch .pk-club { padding: 8px; } body.touch .pk-club .badge { width: 30px; height: 30px; }
   body:has(#home:not(.hidden)) #score, body:has(#home:not(.hidden)) #radar { visibility: hidden; }
   /* ---- introducerea ---- */
   #intro { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer;
@@ -208,14 +229,14 @@
   <div class="box">
     <h1>⚙️ Setări</h1>
     <div class="opts"><div class="opt" id="setBack">◀ Înapoi la echipă</div></div>
-    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 38</b></p>
+    <p class="sub">Albaștrii vs. Roșiii · 90 de minute · prelungiri · penalty-uri · <b style="color:#ffd84a">versiunea 39</b></p>
     <div class="opts menu-opts">
       <div class="opt" data-mode="1"><kbd class="keysOnly">1</kbd> <span class="keysOnly">Un jucător (contra calculatorului)</span><span class="touchOnly">▶ Joacă</span></div>
       <div class="opt keysOnly" data-mode="2"><kbd>2</kbd> Doi jucători</div>
       <div class="opt" id="trOpen">🏋️ Antrenament</div>
       <div class="opt" id="netOpen">🌐 Online (2 telefoane)</div>
     </div>
-    <div class="difs">Echipa ta: <span class="myt" data-t="0">🔵 Albaștrii (Messi, Mbappé)</span><span class="myt" data-t="1">🔴 Roșiii (Ronaldo, Salah)</span></div>
+    <div class="difs myt-row">Echipa ta: <span class="myt" data-t="0">🔵 Albaștrii (Messi, Mbappé)</span><span class="myt" data-t="1">🔴 Roșiii (Ronaldo, Salah)</span></div>
     <div class="difs">Dificultate: <span class="dif" data-d="0">Ușor</span><span class="dif" data-d="1">Normal</span><span class="dif" data-d="2">Greu</span></div>
     <div class="difs">Repriza: <span class="dur" data-m="2">2 min</span><span class="dur" data-m="4">4 min</span><span class="dur" data-m="6">6 min</span></div>
     <div class="difs">Cameră: <span class="cam" data-c="0">1 TV</span><span class="cam" data-c="1">2 Largă</span><span class="cam" data-c="2">3 Sus</span><span class="cam" data-c="3">4 Stadion</span><span class="cam" data-c="4">5 Din spate</span></div>
@@ -250,13 +271,14 @@
 <div id="home" class="hidden">
   <div class="hm-top">
     <div class="hm-logo">⚽ FOTBAL <b>3D</b></div>
-    <div class="hm-team"><span class="myt" data-t="0">🔵 Albaștrii</span><span class="myt" data-t="1">🔴 Roșiii</span></div>
+    <div class="hm-match" id="hmMatch"><span class="hm-club" id="hmMine"></span><b>VS</b><span class="hm-club" id="hmOpp"></span></div>
     <div class="hm-ovr" id="hmOvr"></div>
   </div>
   <div class="hm-body">
     <div class="hm-pitch" id="hmPitch"></div>
     <div class="hm-side">
       <div class="hm-play" id="hmPlay">▶ JOACĂ</div>
+      <div class="hm-btn hm-pick" id="hmPick">🔄 Alege echipele</div>
       <div class="hm-btn" id="hmTrain">🏋️ Antrenament</div>
       <div class="hm-btn" id="hmOnline">🌐 Online</div>
       <div class="hm-btn keysOnly" id="hm2p">👥 2 jucători</div>
@@ -266,6 +288,15 @@
   <div id="hmCard" class="hidden"></div>
 </div>
 <div id="goalCard" class="hidden"></div>
+<div id="pickPanel" class="hidden">
+  <div class="pk-top">
+    <b class="pk-title">Alege echipele</b>
+    <div class="pk-sides"><div class="pk-side sel" data-s="0">👤 Echipa ta<br><span id="pkMine"></span></div><b>VS</b><div class="pk-side" data-s="1">🤖 Calculator<br><span id="pkOpp"></span></div></div>
+    <div class="hm-btn pk-done" id="pkDone">✔ Gata</div>
+  </div>
+  <div class="pk-countries" id="pkCountries"></div>
+  <div class="pk-clubs" id="pkClubs"></div>
+</div>
 <div id="intro" class="hidden">
   <div class="in-logo">
     <img src="icon-512.png" alt="" class="in-icon">
